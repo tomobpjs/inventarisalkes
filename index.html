@@ -13,7 +13,8 @@ import {
   Home, MapPin, FileText, Download, Upload, 
   Camera, Edit3, Trash2, Printer, Scan,
   ChevronRight, LayoutDashboard, Settings,
-  AlertTriangle, CheckCircle, Package, ArrowRightLeft
+  AlertTriangle, CheckCircle, Package, ArrowRightLeft,
+  X
 } from 'lucide-react';
 
 // --- CONFIGURATION & FIREBASE ---
@@ -39,21 +40,29 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [notification, setNotification] = useState(null);
 
-  // Auth Initialization
+  // Auth Initialization (Handling Custom Token Mismatch)
   useEffect(() => {
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+          try {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } catch (tokenErr) {
+            console.error("Token mismatch/error, falling back to anonymous:", tokenErr);
+            await signInAnonymously(auth);
+          }
         } else {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Auth error:", err);
+        console.error("Critical Auth error:", err);
       }
     };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (!u) setIsLoading(false);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -68,15 +77,17 @@ const App = () => {
     const unsubAssets = onSnapshot(assetsQuery, (snapshot) => {
       setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setIsLoading(false);
-    }, (err) => console.error(err));
+    }, (err) => console.error("Assets fetch error:", err));
 
     const unsubRooms = onSnapshot(roomsQuery, (snapshot) => {
       setRooms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, (err) => console.error("Rooms fetch error:", err));
 
     const unsubMutations = onSnapshot(mutationsQuery, (snapshot) => {
-      setMutations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort mutations by timestamp in memory
+      setMutations(data.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)));
+    }, (err) => console.error("Mutations fetch error:", err));
 
     return () => {
       unsubAssets();
@@ -90,22 +101,22 @@ const App = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // --- UI COMPONENTS ---
+  // --- UI HELPERS ---
 
   const Sidebar = () => {
     const menus = [
       { id: 'dashboard', icon: <LayoutDashboard size={20}/>, label: 'Dashboard' },
       { id: 'input', icon: <PlusCircle size={20}/>, label: 'Input Aset' },
       { id: 'database', icon: <Database size={20}/>, label: 'Database Aset' },
-      { id: 'search', icon: <Search size={20}/>, label: 'Pencarian & Scan' },
       { id: 'rooms', icon: <MapPin size={20}/>, label: 'Manajemen Ruangan' },
       { id: 'mutation', icon: <MoveHorizontal size={20}/>, label: 'Mutasi Barang' },
       { id: 'mutation_db', icon: <FileText size={20}/>, label: 'History Mutasi' },
       { id: 'master_room', icon: <Settings size={20}/>, label: 'Master Ruangan' },
+      { id: 'import_export', icon: <Download size={20}/>, label: 'Import/Export' },
     ];
 
     return (
-      <div className="w-64 bg-slate-900 h-screen sticky top-0 flex flex-col text-slate-300">
+      <div className="w-64 bg-slate-900 h-screen sticky top-0 flex flex-col text-slate-300 shrink-0">
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">H</div>
@@ -134,71 +145,321 @@ const App = () => {
         <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded text-xs font-semibold whitespace-nowrap">
           STATUS: ONLINE
         </div>
-        <div className="text-sm text-slate-500 font-medium">SIMARS PRO - Sistem Manajemen Aset Terintegrasi v2.0</div>
+        <div className="text-sm text-slate-500 font-medium truncate">Sistem Manajemen Aset Terintegrasi v2.1</div>
       </div>
       <div className="flex items-center gap-4 pl-4 border-l ml-4 border-slate-200">
-        <span className="text-xs font-medium text-slate-400">UID: {user?.uid.substring(0, 8)}...</span>
-        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
-          {user?.uid.charAt(0).toUpperCase()}
+        <span className="text-xs font-medium text-slate-400 hidden md:inline">UID: {user?.uid}</span>
+        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200">
+          {user?.uid?.charAt(0).toUpperCase() || '?'}
         </div>
       </div>
     </div>
   );
 
-  // --- PAGE COMPONENTS ---
+  // --- PAGES ---
 
   const DashboardPage = () => {
+    const totalQty = assets.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
     const stats = [
-      { label: 'Total Aset', value: assets.reduce((acc, curr) => acc + (curr.quantity || 0), 0), icon: <Package className="text-blue-600"/>, bg: 'bg-blue-50' },
+      { label: 'Total Unit Aset', value: totalQty, icon: <Package className="text-blue-600"/>, bg: 'bg-blue-50' },
       { label: 'Jenis Barang', value: assets.length, icon: <Database className="text-purple-600"/>, bg: 'bg-purple-50' },
       { label: 'Total Ruangan', value: rooms.length, icon: <MapPin className="text-orange-600"/>, bg: 'bg-orange-50' },
-      { label: 'Mutasi Bulan Ini', value: mutations.length, icon: <MoveHorizontal className="text-green-600"/>, bg: 'bg-green-50' },
+      { label: 'Total Mutasi', value: mutations.length, icon: <MoveHorizontal className="text-green-600"/>, bg: 'bg-green-50' },
     ];
 
     return (
       <div className="p-8">
         <h2 className="text-2xl font-bold mb-8">Ringkasan Statistik</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           {stats.map((s, i) => (
             <div key={i} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-              <div className={`w-12 h-12 ${s.bg} rounded-xl flex items-center justify-center`}>{s.icon}</div>
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{s.label}</p>
+              <div className={`w-12 h-12 ${s.bg} rounded-xl flex items-center justify-center shrink-0`}>{s.icon}</div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">{s.label}</p>
                 <p className="text-2xl font-bold text-slate-800">{s.value}</p>
               </div>
             </div>
           ))}
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
               <MoveHorizontal size={18} className="text-blue-600"/> Mutasi Terakhir
             </h3>
-            <div className="space-y-4">
-              {mutations.slice(0, 5).map((m, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+            <div className="space-y-3">
+              {mutations.length > 0 ? mutations.slice(0, 5).map((m, i) => (
+                <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors">
                   <div>
-                    <p className="text-sm font-bold">{m.assetName}</p>
-                    <p className="text-xs text-slate-500">{m.fromRoom} → {m.toRoom}</p>
+                    <p className="text-sm font-bold text-slate-700">{m.assetName}</p>
+                    <p className="text-xs text-slate-500 font-medium">{m.fromRoom} <ArrowRightLeft size={10} className="inline mx-1"/> {m.toRoom}</p>
                   </div>
-                  <p className="text-xs text-slate-400 font-medium">{m.date}</p>
+                  <p className="text-xs text-slate-400 font-bold bg-white px-2 py-1 rounded shadow-sm border">{m.date}</p>
                 </div>
-              ))}
+              )) : <p className="text-sm text-slate-400 italic py-4">Belum ada riwayat mutasi.</p>}
             </div>
           </div>
+
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-              <AlertTriangle size={18} className="text-orange-500"/> Stok Terendah
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
+              <AlertTriangle size={18} className="text-orange-500"/> Stok Kritis (≤ 5)
             </h3>
-            <div className="space-y-4">
-              {assets.filter(a => a.quantity <= 5).slice(0, 5).map((a, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                  <p className="text-sm font-medium">{a.name}</p>
-                  <p className="text-sm font-bold text-red-500">{a.quantity} Unit</p>
-                </div>
-              ))}
+            <div className="space-y-3">
+              {assets.filter(a => Number(a.quantity) <= 5).length > 0 ? (
+                assets.filter(a => Number(a.quantity) <= 5).slice(0, 5).map((a, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+                    <p className="text-sm font-semibold text-slate-700">{a.name}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 font-medium">{a.location}</span>
+                      <p className="text-sm font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-100">{a.quantity} Unit</p>
+                    </div>
+                  </div>
+                ))
+              ) : <p className="text-sm text-slate-400 italic py-4 text-center">Stok semua aset aman.</p>}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const MasterRoomPage = () => {
+    const [name, setName] = useState('');
+    const [editingId, setEditingId] = useState(null);
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (!name.trim()) return;
+      try {
+        if (editingId) {
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', editingId), { name });
+          showNotify("Ruangan berhasil diperbarui");
+        } else {
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { name });
+          showNotify("Ruangan baru ditambahkan");
+        }
+        setName('');
+        setEditingId(null);
+      } catch (err) { showNotify("Terjadi kesalahan", "error"); }
+    };
+
+    return (
+      <div className="p-8 max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold mb-6">Master Ruangan</h2>
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl border shadow-sm mb-8 flex gap-3">
+          <input 
+            type="text" value={name} onChange={e => setName(e.target.value)}
+            className="flex-1 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" 
+            placeholder="Masukkan nama ruangan (contoh: Lab 1, Poli Gigi)..." required
+          />
+          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-colors shadow-lg shadow-blue-200">
+            {editingId ? 'Update' : 'Tambah'}
+          </button>
+        </form>
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="divide-y divide-slate-100">
+            {rooms.length > 0 ? rooms.map(room => (
+              <div key={room.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                <span className="font-bold text-slate-700">{room.name}</span>
+                <div className="flex gap-1">
+                  <button onClick={() => { setName(room.name); setEditingId(room.id); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 size={18}/></button>
+                  <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', room.id))} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18}/></button>
+                </div>
+              </div>
+            )) : <p className="p-8 text-center text-slate-400 italic">Belum ada data ruangan.</p>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const InputAssetPage = ({ editData = null, onCancel = null }) => {
+    const [form, setForm] = useState({
+      date: new Date().toISOString().split('T')[0],
+      name: '', brand: '', serial: '', quantity: 1, price: '', vendor: '', location: ''
+    });
+
+    useEffect(() => { 
+      if (editData) setForm({
+        ...editData,
+        date: editData.date || new Date().toISOString().split('T')[0]
+      }); 
+    }, [editData]);
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      try {
+        if (editData) {
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', editData.id), form);
+          showNotify("Data aset berhasil diperbarui");
+          if (onCancel) onCancel();
+        } else {
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), form);
+          showNotify("Aset baru berhasil dicatat");
+          setForm({ date: new Date().toISOString().split('T')[0], name: '', brand: '', serial: '', quantity: 1, price: '', vendor: '', location: '' });
+        }
+      } catch (err) { showNotify("Gagal menyimpan data", "error"); }
+    };
+
+    return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-2xl font-bold text-slate-800">{editData ? 'Edit Detail Aset' : 'Registrasi Aset Baru'}</h2>
+          {editData && (
+            <button onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+          )}
+        </div>
+        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-bold text-slate-700 mb-2">Nama Barang</label>
+            <input 
+              type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} 
+              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 focus:bg-white transition-all bg-slate-50/50" 
+              placeholder="Contoh: USG Mindray DC-30" required 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Lokasi / Ruangan</label>
+            <select 
+              value={form.location} onChange={e => setForm({...form, location: e.target.value})} 
+              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" required
+            >
+              <option value="">-- Pilih Lokasi --</option>
+              {rooms.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Stok / Kuantitas</label>
+            <input 
+              type="number" value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} 
+              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
+              placeholder="0" required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Serial Number / Kode</label>
+            <input 
+              type="text" value={form.serial} onChange={e => setForm({...form, serial: e.target.value})} 
+              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
+              placeholder="SN-XXXX-XXXX"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Merk / Model</label>
+            <input 
+              type="text" value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} 
+              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Vendor / Distributor</label>
+            <input 
+              type="text" value={form.vendor} onChange={e => setForm({...form, vendor: e.target.value})} 
+              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Tanggal Pengadaan</label>
+            <input 
+              type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} 
+              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
+            />
+          </div>
+          <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t border-slate-100 mt-2">
+            {editData && (
+              <button type="button" onClick={onCancel} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Batal</button>
+            )}
+            <button type="submit" className="bg-blue-600 text-white px-10 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2">
+              <CheckCircle size={20}/> {editData ? 'Simpan Perubahan' : 'Daftarkan Aset'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
+  const DatabaseAssetPage = () => {
+    const [editingAsset, setEditingAsset] = useState(null);
+    const [search, setSearch] = useState('');
+
+    if (editingAsset) return <InputAssetPage editData={editingAsset} onCancel={() => setEditingAsset(null)} />;
+
+    const filteredAssets = assets.filter(a => 
+      a.name.toLowerCase().includes(search.toLowerCase()) || 
+      a.location.toLowerCase().includes(search.toLowerCase()) ||
+      (a.serial && a.serial.toLowerCase().includes(search.toLowerCase()))
+    );
+    
+    return (
+      <div className="p-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <h2 className="text-2xl font-bold text-slate-800">Database Inventaris</h2>
+          <div className="relative w-full md:w-96">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+            <input 
+              type="text" 
+              placeholder="Cari nama aset, SN, atau ruangan..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-100">
+                  <th className="px-8 py-5">Identitas Aset</th>
+                  <th className="px-6 py-5">Lokasi</th>
+                  <th className="px-6 py-5">Info Teknis</th>
+                  <th className="px-6 py-5 text-center">Stok</th>
+                  <th className="px-8 py-5 text-right">Manajemen</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredAssets.length > 0 ? filteredAssets.map(a => (
+                  <tr key={a.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="px-8 py-5">
+                      <p className="font-bold text-slate-800 text-base">{a.name}</p>
+                      <p className="text-xs text-slate-400 font-medium">Vendor: {a.vendor || 'N/A'}</p>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <MapPin size={14} className="text-blue-500"/>
+                        <span className="font-semibold text-sm">{a.location}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5">
+                      <p className="text-xs font-bold text-slate-400 uppercase">SN: <span className="text-slate-700">{a.serial || '-'}</span></p>
+                      <p className="text-xs font-bold text-slate-400 uppercase">Merk: <span className="text-slate-700">{a.brand || '-'}</span></p>
+                    </td>
+                    <td className="px-6 py-5 text-center">
+                      <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${Number(a.quantity) <= 5 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
+                        {a.quantity} Unit
+                      </span>
+                    </td>
+                    <td className="px-8 py-5 text-right space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setEditingAsset(a)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-all">
+                        <Edit3 size={18}/>
+                      </button>
+                      <button onClick={() => {
+                        if(confirm(`Hapus data ${a.name}?`)) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', a.id));
+                      }} className="p-2 text-slate-400 hover:text-red-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-red-100 transition-all">
+                        <Trash2 size={18}/>
+                      </button>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="5" className="px-8 py-12 text-center text-slate-400 italic">
+                      Tidak ada data aset yang ditemukan.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -212,8 +473,8 @@ const App = () => {
 
     const handleMutate = async (e) => {
       e.preventDefault();
-      if (!selectedAsset || !targetRoom) return showNotify("Lengkapi data mutasi", "error");
-      if (selectedAsset.location === targetRoom) return showNotify("Ruangan tujuan harus berbeda", "error");
+      if (!selectedAsset || !targetRoom) return showNotify("Harap lengkapi data mutasi", "error");
+      if (selectedAsset.location === targetRoom) return showNotify("Ruangan tujuan tidak boleh sama dengan saat ini", "error");
 
       try {
         await runTransaction(db, async (transaction) => {
@@ -243,35 +504,37 @@ const App = () => {
 
     return (
       <div className="p-8 max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold mb-8">Input Mutasi Aset</h2>
-        <div className="bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
-          <form onSubmit={handleMutate} className="space-y-6">
+        <h2 className="text-2xl font-bold mb-8 text-slate-800">Catat Mutasi / Perpindahan Aset</h2>
+        <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-200">
+          <form onSubmit={handleMutate} className="space-y-8">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Pilih Aset</label>
+              <label className="block text-sm font-bold text-slate-700 mb-3">Pilih Aset Yang Akan Dipindahkan</label>
               <select 
                 onChange={(e) => setSelectedAsset(assets.find(a => a.id === e.target.value))}
-                className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500"
+                className="w-full border-2 border-slate-100 bg-slate-50/50 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:bg-white transition-all text-slate-800 font-medium"
               >
-                <option value="">-- Cari Aset --</option>
+                <option value="">-- Cari Nama Aset --</option>
                 {assets.map(a => (
-                  <option key={a.id} value={a.id}>{a.name} (SN: {a.serial || '-'}) - Lokasi: {a.location}</option>
+                  <option key={a.id} value={a.id}>{a.name} (SN: {a.serial || '-'}) - @{a.location}</option>
                 ))}
               </select>
             </div>
 
             {selectedAsset && (
-              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-blue-400 uppercase">Lokasi Saat Ini</p>
-                  <p className="font-bold text-blue-800">{selectedAsset.location}</p>
+              <div className="p-6 bg-blue-50 rounded-3xl border-2 border-blue-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in zoom-in-95 duration-300">
+                <div className="text-center md:text-left">
+                  <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Lokasi Sekarang</p>
+                  <p className="font-black text-2xl text-blue-800">{selectedAsset.location}</p>
                 </div>
-                <ArrowRightLeft className="text-blue-300" />
-                <div className="text-right">
-                  <p className="text-xs font-bold text-blue-400 uppercase">Ruangan Tujuan</p>
+                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 animate-bounce md:animate-none">
+                  <ArrowRightLeft size={24} />
+                </div>
+                <div className="text-center md:text-right w-full md:w-auto">
+                  <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 text-center md:text-right">Ruangan Tujuan</p>
                   <select 
                     value={targetRoom}
                     onChange={(e) => setTargetRoom(e.target.value)}
-                    className="border-none bg-transparent font-bold text-blue-800 focus:ring-0 text-right p-0"
+                    className="w-full md:w-auto border-none bg-transparent font-black text-2xl text-blue-800 focus:ring-0 p-0 text-center md:text-right cursor-pointer"
                   >
                     <option value="">Pilih Tujuan</option>
                     {rooms.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
@@ -281,17 +544,17 @@ const App = () => {
             )}
 
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Keterangan / Alasan Pindah</label>
+              <label className="block text-sm font-bold text-slate-700 mb-3">Keterangan / Alasan Mutasi</label>
               <textarea 
                 value={note}
                 onChange={e => setNote(e.target.value)}
-                className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 h-24"
-                placeholder="Contoh: Pemindahan sementara untuk maintenance..."
+                className="w-full border-2 border-slate-100 bg-slate-50/50 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:bg-white transition-all h-32"
+                placeholder="Tuliskan alasan pemindahan barang (contoh: Maintenance berkala, Kebutuhan darurat IGD, dll)..."
               />
             </div>
 
-            <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-              <MoveHorizontal size={20}/> Konfirmasi Mutasi Barang
+            <button type="submit" className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl shadow-slate-200 hover:bg-blue-600 transition-all flex items-center justify-center gap-3 group uppercase tracking-wider">
+              Konfirmasi Perpindahan <MoveHorizontal className="group-hover:translate-x-2 transition-transform" />
             </button>
           </form>
         </div>
@@ -301,208 +564,98 @@ const App = () => {
 
   const MutationHistoryPage = () => (
     <div className="p-8">
-      <h2 className="text-2xl font-bold mb-6">History Mutasi Barang</h2>
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-6 py-4">Waktu</th>
-              <th className="px-6 py-4">Nama Barang</th>
-              <th className="px-6 py-4">Dari</th>
-              <th className="px-6 py-4">Ke</th>
-              <th className="px-6 py-4">Keterangan</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {mutations.sort((a, b) => b.timestamp?.localeCompare(a.timestamp)).map((m, i) => (
-              <tr key={i} className="hover:bg-slate-50">
-                <td className="px-6 py-4 text-xs font-medium text-slate-500">{m.date}</td>
-                <td className="px-6 py-4 font-bold text-slate-800">{m.assetName}</td>
-                <td className="px-6 py-4"><span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold">{m.fromRoom}</span></td>
-                <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-[10px] font-bold">{m.toRoom}</span></td>
-                <td className="px-6 py-4 text-sm text-slate-500">{m.note || '-'}</td>
+      <h2 className="text-2xl font-bold mb-6 text-slate-800">Log Riwayat Mutasi Barang</h2>
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-[10px] uppercase font-black tracking-widest text-slate-400">
+                <th className="px-8 py-5">Tanggal</th>
+                <th className="px-6 py-5">Aset Terkait</th>
+                <th className="px-6 py-5">Log Alur</th>
+                <th className="px-8 py-5">Keterangan</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {mutations.length > 0 ? mutations.map((m, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-8 py-5">
+                    <span className="font-bold text-slate-500 text-xs">{m.date}</span>
+                  </td>
+                  <td className="px-6 py-5">
+                    <p className="font-black text-slate-800">{m.assetName}</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black">{m.fromRoom}</span>
+                      <ChevronRight size={14} className="text-slate-300" />
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black">{m.toRoom}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <p className="text-sm text-slate-500 italic">"{m.note || '-'}"</p>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="4" className="px-8 py-12 text-center text-slate-400 italic">Belum ada riwayat mutasi tercatat.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 
-  // Import Page Shell (Conceptual as real file handling needs libraries)
   const ImportExportPage = () => {
     const exportCSV = () => {
-      const headers = ['Nama', 'Merk', 'SN', 'Lokasi', 'Stok', 'Harga'];
-      const rows = assets.map(a => [a.name, a.brand, a.serial, a.location, a.quantity, a.price]);
+      const headers = ['Nama', 'Merk', 'SN', 'Lokasi', 'Stok', 'Vendor', 'Tanggal Pengadaan'];
+      const rows = assets.map(a => [a.name, a.brand, a.serial, a.location, a.quantity, a.vendor, a.date]);
       let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(r => r.join(",")).join("\n");
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "database_aset_rs.csv");
+      link.setAttribute("download", `SIMARS_Inventaris_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      showNotify("Export CSV berhasil");
     };
 
     return (
-      <div className="p-8 max-w-2xl mx-auto text-center">
-        <h2 className="text-2xl font-bold mb-6">Import / Export Database</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-            <Upload size={48} className="mx-auto text-blue-500 mb-4" />
-            <h3 className="font-bold mb-2">Import CSV</h3>
-            <p className="text-sm text-slate-500 mb-6">Unggah file CSV untuk update masal aset.</p>
-            <button className="bg-slate-100 px-6 py-2 rounded-lg text-sm font-bold text-slate-700 cursor-not-allowed">Coming Soon</button>
-          </div>
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-            <Download size={48} className="mx-auto text-green-500 mb-4" />
-            <h3 className="font-bold mb-2">Export CSV</h3>
-            <p className="text-sm text-slate-500 mb-6">Unduh data aset ke format spreadsheet.</p>
-            <button onClick={exportCSV} className="bg-blue-600 px-6 py-2 rounded-lg text-sm font-bold text-white hover:bg-blue-700">Download CSV</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Re-import existing sub-pages logic from your snippet...
-  // (MasterRoomPage, InputAssetPage, DatabaseAssetPage, SearchPage, RoomManagementPage were already in your context)
-
-  const MasterRoomPage = () => {
-    const [name, setName] = useState('');
-    const [editingId, setEditingId] = useState(null);
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      if (!name) return;
-      try {
-        if (editingId) {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', editingId), { name });
-          showNotify("Ruangan berhasil diupdate");
-        } else {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { name });
-          showNotify("Ruangan berhasil ditambah");
-        }
-        setName('');
-        setEditingId(null);
-      } catch (err) { showNotify("Gagal", "error"); }
-    };
-
-    return (
-      <div className="p-8 max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">Master Ruangan</h2>
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border mb-8 flex gap-2">
-          <input 
-            type="text" value={name} onChange={e => setName(e.target.value)}
-            className="flex-1 border rounded-lg px-4 py-2" placeholder="Nama Ruangan..." required
-          />
-          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg">{editingId ? 'Update' : 'Tambah'}</button>
-        </form>
-        <div className="bg-white rounded-xl border divide-y">
-          {rooms.map(room => (
-            <div key={room.id} className="p-4 flex justify-between items-center">
-              <span className="font-medium">{room.name}</span>
-              <div className="flex gap-2">
-                <button onClick={() => { setName(room.name); setEditingId(room.id); }} className="text-blue-600"><Edit3 size={16}/></button>
-                <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', room.id))} className="text-red-600"><Trash2 size={16}/></button>
-              </div>
+      <div className="p-8 max-w-4xl mx-auto text-center">
+        <h2 className="text-2xl font-bold mb-12 text-slate-800">Manajemen Data Eksternal</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white p-12 rounded-3xl shadow-xl border border-slate-200 group hover:border-blue-400 transition-all">
+            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+              <Upload size={40} />
             </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const InputAssetPage = ({ editData = null, onSuccess = null }) => {
-    const [form, setForm] = useState({
-      date: new Date().toISOString().split('T')[0],
-      name: '', brand: '', serial: '', quantity: 1, price: '', vendor: '', location: '', image: null
-    });
-    useEffect(() => { if (editData) setForm(editData); }, [editData]);
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      try {
-        if (editData) {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', editData.id), form);
-          showNotify("Aset diperbarui");
-          if (onSuccess) onSuccess();
-        } else {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), form);
-          showNotify("Aset ditambah");
-          setForm({ date: new Date().toISOString().split('T')[0], name: '', brand: '', serial: '', quantity: 1, price: '', vendor: '', location: '', image: null });
-        }
-      } catch (err) { showNotify("Gagal", "error"); }
-    };
-
-    return (
-      <div className="p-8 max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">{editData ? 'Edit Aset' : 'Input Aset Baru'}</h2>
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl border grid grid-cols-2 gap-6">
-          <div className="col-span-2 md:col-span-1">
-            <label className="block text-sm font-bold mb-1">Nama Barang</label>
-            <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full border rounded-lg p-2" required />
+            <h3 className="font-black text-xl mb-3 text-slate-800 uppercase tracking-tight">Import CSV</h3>
+            <p className="text-sm text-slate-500 mb-8 leading-relaxed">Update massal inventaris Anda dengan mengunggah file spreadsheet berformat CSV.</p>
+            <button className="bg-slate-100 px-8 py-3 rounded-2xl text-sm font-black text-slate-400 cursor-not-allowed uppercase tracking-wider">Coming Soon</button>
           </div>
-          <div className="col-span-2 md:col-span-1">
-            <label className="block text-sm font-bold mb-1">Lokasi</label>
-            <select value={form.location} onChange={e => setForm({...form, location: e.target.value})} className="w-full border rounded-lg p-2" required>
-              <option value="">Pilih Ruangan</option>
-              {rooms.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
-            </select>
+          <div className="bg-white p-12 rounded-3xl shadow-xl border border-slate-200 group hover:border-green-400 transition-all">
+            <div className="w-20 h-20 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+              <Download size={40} />
+            </div>
+            <h3 className="font-black text-xl mb-3 text-slate-800 uppercase tracking-tight">Export Database</h3>
+            <p className="text-sm text-slate-500 mb-8 leading-relaxed">Unduh salinan lengkap database aset rumah sakit Anda ke dalam format CSV.</p>
+            <button onClick={exportCSV} className="bg-green-600 hover:bg-green-700 px-8 py-3 rounded-2xl text-sm font-black text-white shadow-lg shadow-green-100 transition-all uppercase tracking-wider">Download CSV</button>
           </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Stok</label>
-            <input type="number" value={form.quantity} onChange={e => setForm({...form, quantity: parseInt(e.target.value)})} className="w-full border rounded-lg p-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">SN / Kode</label>
-            <input type="text" value={form.serial} onChange={e => setForm({...form, serial: e.target.value})} className="w-full border rounded-lg p-2" />
-          </div>
-          <div className="col-span-2 flex justify-end gap-3">
-            <button type="submit" className="bg-blue-600 text-white px-8 py-2 rounded-lg font-bold">Simpan Data</button>
-          </div>
-        </form>
-      </div>
-    );
-  };
-
-  const DatabaseAssetPage = () => {
-    const [editingAsset, setEditingAsset] = useState(null);
-    if (editingAsset) return <InputAssetPage editData={editingAsset} onSuccess={() => setEditingAsset(null)} />;
-    
-    return (
-      <div className="p-8">
-        <h2 className="text-2xl font-bold mb-6">Database Aset</h2>
-        <div className="bg-white rounded-xl border overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 border-b">
-              <tr>
-                <th className="px-6 py-4">Nama Aset</th>
-                <th className="px-6 py-4">Lokasi</th>
-                <th className="px-6 py-4">Stok</th>
-                <th className="px-6 py-4 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {assets.map(a => (
-                <tr key={a.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-3 font-bold">{a.name}</td>
-                  <td className="px-6 py-3"><span className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs">{a.location}</span></td>
-                  <td className="px-6 py-3 font-bold text-blue-700">{a.quantity} Unit</td>
-                  <td className="px-6 py-3 text-right">
-                    <button onClick={() => setEditingAsset(a)} className="text-slate-400 hover:text-blue-600 mr-2"><Edit3 size={18}/></button>
-                    <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', a.id))} className="text-slate-400 hover:text-red-600"><Trash2 size={18}/></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
     );
   };
 
   const renderContent = () => {
-    if (isLoading) return <div className="flex items-center justify-center h-full text-slate-400">Memuat data cloud...</div>;
+    if (isLoading) return (
+      <div className="flex flex-col items-center justify-center h-full space-y-4">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold animate-pulse uppercase tracking-widest text-xs">Menghubungkan ke Cloud...</p>
+      </div>
+    );
+
     switch(activeMenu) {
       case 'dashboard': return <DashboardPage />;
       case 'input': return <InputAssetPage />;
@@ -516,19 +669,19 @@ const App = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900">
       <Sidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-slate-50/50">
           {renderContent()}
         </main>
       </div>
 
       {notification && (
-        <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 z-50 ${notification.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-900 text-white'}`}>
-          {notification.type === 'error' ? <AlertTriangle size={20}/> : <CheckCircle size={20} className="text-green-400"/>}
-          <span className="font-bold">{notification.msg}</span>
+        <div className={`fixed bottom-8 right-8 px-8 py-5 rounded-3xl shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-500 z-50 border-2 ${notification.type === 'error' ? 'bg-red-600 text-white border-red-400' : 'bg-slate-900 text-white border-slate-700'}`}>
+          {notification.type === 'error' ? <AlertTriangle size={24}/> : <CheckCircle size={24} className="text-green-400"/>}
+          <span className="font-black uppercase tracking-tight">{notification.msg}</span>
         </div>
       )}
     </div>
