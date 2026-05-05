@@ -52,7 +52,6 @@
 </head>
 <body class="flex flex-col h-screen overflow-hidden">
 
-    <!-- Running Text Informasi -->
     <div class="running-text-container no-print">
         <div class="running-text">
             Selamat Datang di Sistem Inventaris Alkes V.1.0 • Pastikan penginputan data sesuai dengan fisik barang • Developed by:TOMOS JR2026 • Semoga Bahagia.
@@ -60,7 +59,6 @@
     </div>
 
     <div class="flex flex-1 overflow-hidden">
-        <!-- Sidebar Navigation -->
         <aside class="w-64 bg-slate-900 text-white flex flex-col no-print shadow-2xl z-20">
             <div class="p-6 text-center border-b border-slate-800">
                 <i class="fas fa-hospital-user text-4xl text-blue-400 mb-2"></i>
@@ -106,11 +104,8 @@
             </nav>
         </aside>
 
-        <!-- Main Content Area -->
         <main class="flex-1 flex flex-col overflow-hidden relative">
             <div class="watermark no-print">@ TOMOSJR 2026</div>
-            
-            <!-- App Header -->
             <header class="bg-white border-b px-8 py-4 flex justify-between items-center no-print shadow-sm z-10">
                 <div>
                     <h2 id="page-title" class="text-2xl font-bold text-slate-800">Dashboard</h2>
@@ -127,47 +122,40 @@
                 </div>
             </header>
 
-            <!-- dynamic content container -->
-            <div id="content-container" class="flex-1 overflow-y-auto p-8">
-                <!-- Content will be injected here via JavaScript -->
-            </div>
+            <div id="content-container" class="flex-1 overflow-y-auto p-8"></div>
         </main>
     </div>
 
-    <!-- Global Modal Structure -->
     <div id="modal-container" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4 transition-all duration-300">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-300" id="modal-body">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" id="modal-body">
             <div id="modal-content" class="p-8"></div>
         </div>
     </div>
 
-    <!-- Firebase Logic & App Scripts -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Konfigurasi Firebase
         const firebaseConfig = {
-  apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
-  authDomain: "inventarisalkes-f3992.firebaseapp.com",
-  projectId: "inventarisalkes-f3992",
-  storageBucket: "inventarisalkes-f3992.firebasestorage.app",
-  messagingSenderId: "83234246153",
-  appId: "1:83234246153:web:0acdd739523b409643f2d8"
-};
+            apiKey: "", // Diisi otomatis oleh environment
+            authDomain: "inventarisalkes-f3992.firebaseapp.com",
+            projectId: "inventarisalkes-f3992",
+            storageBucket: "inventarisalkes-f3992.firebasestorage.app",
+            messagingSenderId: "83234246153",
+            appId: "1:83234246153:web:0acdd739523b409643f2d8"
+        };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'simars-pro-v2';
 
-        // State Global
         let assets = [];
         let rooms = [];
         let mutations = [];
         let currentUser = null;
 
-        // Inisialisasi Auth
         window.onload = async () => {
             await signInAnonymously(auth);
             onAuthStateChanged(auth, (user) => {
@@ -179,45 +167,45 @@
             });
         };
 
-        // Real-time Data Sync
+        const notify = (msg, type = "success") => {
+            const div = document.createElement('div');
+            div.className = `fixed bottom-8 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold shadow-2xl z-[1000] transition-all transform animate-bounce ${type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`;
+            div.innerText = msg;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 3000);
+        };
+
         const loadData = () => {
             if (!currentUser) return;
-
-            // Aset
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), (snap) => {
                 assets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                updateViewIfActive(['dashboard', 'database', 'ruangan']);
+                refreshCurrentPage();
             }, (err) => notify("Gagal memuat aset: " + err.message, "error"));
 
-            // Ruangan
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), (snap) => {
                 rooms = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 if (rooms.length === 0) seedInitialRooms();
-                updateViewIfActive(['input-aset', 'master-ruangan', 'mutasi']);
-            }, (err) => notify("Gagal memuat ruangan: " + err.message, "error"));
+                refreshCurrentPage();
+            });
 
-            // Mutasi
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), (snap) => {
                 mutations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                updateViewIfActive(['data-mutasi', 'pencarian']);
-            }, (err) => notify("Gagal memuat mutasi: " + err.message, "error"));
-        };
-
-        const updateViewIfActive = (pages) => {
-            const currentTitle = document.getElementById('page-title').innerText.toLowerCase();
-            pages.forEach(p => {
-                if (currentTitle.includes(p.replace('-', ' '))) showPage(p);
+                refreshCurrentPage();
             });
         };
 
+        const refreshCurrentPage = () => {
+            const activeBtn = document.querySelector('.nav-btn.sidebar-active');
+            if (activeBtn) showPage(activeBtn.getAttribute('data-page'));
+        };
+
         const seedInitialRooms = async () => {
-            const defaults = ["IGD", "ICU", "Radiologi", "Laboratorium", "Fisioterapi", "Hemodialisa", "Kemoterapi"];
+            const defaults = ["IGD", "ICU", "Radiologi", "Laboratorium", "Fisioterapi", "OK"];
             for (let name of defaults) {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { name });
             }
         };
 
-        // Router Sederhana
         window.showPage = (page) => {
             const container = document.getElementById('content-container');
             const title = document.getElementById('page-title');
@@ -231,139 +219,106 @@
             switch(page) {
                 case 'dashboard':
                     title.innerText = "Dashboard";
-                    subtitle.innerText = "Ringkasan statistik aset rumah sakit";
                     renderDashboard(container);
                     break;
                 case 'input-aset':
                     title.innerText = "Input Aset";
-                    subtitle.innerText = "Tambahkan barang atau alat medis baru";
                     renderInputAset(container);
                     break;
                 case 'database':
                     title.innerText = "Database Aset";
-                    subtitle.innerText = "Seluruh rekapan data barang tersimpan";
                     renderDatabase(container);
                     break;
                 case 'pencarian':
                     title.innerText = "Pencarian & Scan";
-                    subtitle.innerText = "Cari aset melalui nama, kode, atau barcode";
                     renderPencarian(container);
                     break;
                 case 'ruangan':
                     title.innerText = "Manajemen Ruangan";
-                    subtitle.innerText = "Lihat aset berdasarkan lokasi ruangan";
                     renderRuangan(container);
                     break;
                 case 'mutasi':
                     title.innerText = "Mutasi Barang";
-                    subtitle.innerText = "Proses perpindahan aset antar ruangan";
                     renderMutasi(container);
                     break;
                 case 'data-mutasi':
                     title.innerText = "Riwayat Mutasi";
-                    subtitle.innerText = "Log lengkap aktivitas perpindahan barang";
                     renderDataMutasi(container);
                     break;
                 case 'laporan':
                     title.innerText = "Laporan & Cetak";
-                    subtitle.innerText = "Cetak dokumen PDF resmi untuk laporan";
                     renderLaporan(container);
                     break;
                 case 'import-export':
                     title.innerText = "Import/Export";
-                    subtitle.innerText = "Kelola data dalam jumlah besar via Excel";
                     renderImportExport(container);
                     break;
                 case 'master-ruangan':
                     title.innerText = "Pengaturan Ruang";
-                    subtitle.innerText = "Kelola daftar ruangan rumah sakit";
                     renderMasterRuangan(container);
                     break;
             }
         };
 
-        // --- DASHBOARD RENDERER ---
+        // RENDERERS
         const renderDashboard = (container) => {
             const valTotal = assets.reduce((s, a) => s + ((a.harga || 0) * (a.jumlah || 0)), 0);
             container.innerHTML = `
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center text-xl">
-                                <i class="fas fa-boxes"></i>
-                            </div>
-                            <span class="text-xs font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">+12%</span>
+                            <div class="w-12 h-12 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center text-xl"><i class="fas fa-boxes"></i></div>
                         </div>
-                        <h4 class="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Aset</h4>
+                        <h4 class="text-slate-500 text-xs font-bold uppercase">Total Aset</h4>
                         <p class="text-3xl font-bold text-slate-800">${assets.length}</p>
                     </div>
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-xl flex items-center justify-center text-xl">
-                                <i class="fas fa-cubes"></i>
-                            </div>
+                            <div class="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-xl flex items-center justify-center text-xl"><i class="fas fa-cubes"></i></div>
                         </div>
-                        <h4 class="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Unit</h4>
+                        <h4 class="text-slate-500 text-xs font-bold uppercase">Total Unit</h4>
                         <p class="text-3xl font-bold text-slate-800">${assets.reduce((s,a) => s + (Number(a.jumlah) || 0), 0)}</p>
                     </div>
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-amber-50 text-amber-500 rounded-xl flex items-center justify-center text-xl">
-                                <i class="fas fa-hospital"></i>
-                            </div>
+                            <div class="w-12 h-12 bg-amber-50 text-amber-500 rounded-xl flex items-center justify-center text-xl"><i class="fas fa-hospital"></i></div>
                         </div>
-                        <h4 class="text-slate-500 text-xs font-bold uppercase tracking-wider">Ruangan Terdaftar</h4>
+                        <h4 class="text-slate-500 text-xs font-bold uppercase">Ruangan</h4>
                         <p class="text-3xl font-bold text-slate-800">${rooms.length}</p>
                     </div>
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center text-xl">
-                                <i class="fas fa-wallet"></i>
-                            </div>
+                            <div class="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center text-xl"><i class="fas fa-wallet"></i></div>
                         </div>
-                        <h4 class="text-slate-500 text-xs font-bold uppercase tracking-wider">Nilai Inventaris</h4>
+                        <h4 class="text-slate-500 text-xs font-bold uppercase">Nilai Inventaris</h4>
                         <p class="text-xl font-bold text-slate-800 truncate">Rp ${valTotal.toLocaleString('id-ID')}</p>
                     </div>
                 </div>
-
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                        <h3 class="font-bold text-slate-800 mb-4 flex items-center">
-                            <i class="fas fa-clock mr-2 text-blue-500"></i> Aktivitas Terakhir
-                        </h3>
+                        <h3 class="font-bold text-slate-800 mb-4"><i class="fas fa-clock mr-2 text-blue-500"></i> Aktivitas Terakhir</h3>
                         <div class="space-y-4">
-                            ${mutations.slice(-4).reverse().map(m => `
-                                <div class="flex items-start space-x-3 p-3 rounded-xl hover:bg-slate-50">
-                                    <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs text-slate-500 shrink-0">
-                                        <i class="fas ${m.jenis === 'Rusak' ? 'fa-exclamation-triangle text-red-400' : 'fa-exchange-alt'}"></i>
-                                    </div>
+                            ${mutations.slice(-5).reverse().map(m => `
+                                <div class="flex items-start space-x-3 p-3 rounded-xl hover:bg-slate-50 border-b">
+                                    <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs text-slate-500 shrink-0"><i class="fas fa-exchange-alt"></i></div>
                                     <div class="flex-1 min-w-0">
                                         <p class="text-sm font-semibold text-slate-700 truncate">${m.namaAsset}</p>
-                                        <p class="text-[10px] text-slate-400 font-medium">${m.jenis} ke ${m.lokasiTujuan} • ${m.tanggal}</p>
+                                        <p class="text-[10px] text-slate-400">${m.jenis} ke ${m.lokasiTujuan} • ${m.tanggal}</p>
                                     </div>
                                 </div>
-                            `).join('')}
-                            ${mutations.length === 0 ? '<p class="text-center py-10 text-slate-400 text-sm">Belum ada riwayat mutasi</p>' : ''}
+                            `).join('') || '<p class="text-center text-slate-400">Belum ada mutasi</p>'}
                         </div>
                     </div>
-                    
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                        <h3 class="font-bold text-slate-800 mb-4 flex items-center">
-                            <i class="fas fa-map-marked-alt mr-2 text-emerald-500"></i> Sebaran Aset
-                        </h3>
-                        <div class="space-y-3">
+                        <h3 class="font-bold text-slate-800 mb-4"><i class="fas fa-chart-pie mr-2 text-emerald-500"></i> Sebaran Ruang</h3>
+                        <div class="space-y-4">
                             ${rooms.slice(0, 5).map(r => {
                                 const count = assets.filter(a => a.lokasi === r.name).length;
                                 const pct = assets.length ? (count / assets.length * 100) : 0;
                                 return `
                                     <div>
-                                        <div class="flex justify-between text-xs font-bold mb-1">
-                                            <span class="text-slate-600">${r.name}</span>
-                                            <span class="text-slate-400">${count} Aset</span>
-                                        </div>
-                                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                            <div class="bg-emerald-500 h-full" style="width: ${pct}%"></div>
-                                        </div>
+                                        <div class="flex justify-between text-xs font-bold mb-1"><span>${r.name}</span><span>${count} unit</span></div>
+                                        <div class="w-full bg-slate-100 h-2 rounded-full"><div class="bg-blue-500 h-full rounded-full" style="width:${pct}%"></div></div>
                                     </div>
                                 `;
                             }).join('')}
@@ -373,189 +328,76 @@
             `;
         };
 
-        // --- INPUT ASET RENDERER ---
         const renderInputAset = (container, editData = null) => {
             container.innerHTML = `
-                <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border p-8">
-                    <form id="asset-form" class="space-y-8">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tanggal Pembelian</label>
-                                <input type="date" id="form-tanggal" value="${editData?.tanggal || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Nama Barang <span class="text-red-500">*</span></label>
-                                <input type="text" id="form-nama" required value="${editData?.nama || ''}" placeholder="Misal: USG Mindray DP-10" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Merk / Tipe</label>
-                                <input type="text" id="form-merk" value="${editData?.merk || ''}" placeholder="Misal: Mindray / Portable" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">SN / Kode Inventaris</label>
-                                <input type="text" id="form-sn" value="${editData?.sn || ''}" placeholder="Scan barcode atau ketik manual" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Jumlah Unit <span class="text-red-500">*</span></label>
-                                <input type="number" id="form-jumlah" required value="${editData?.jumlah || 1}" min="1" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Harga Satuan (Rp)</label>
-                                <input type="number" id="form-harga" value="${editData?.harga || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor / Supplier</label>
-                                <input type="text" id="form-vendor" value="${editData?.vendor || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Lokasi Barang <span class="text-red-500">*</span></label>
-                                <select id="form-lokasi" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border p-8">
+                    <form id="asset-form" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div><label class="block text-xs font-bold mb-1">Nama Barang *</label><input type="text" id="f-nama" required value="${editData?.nama || ''}" class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                            <div><label class="block text-xs font-bold mb-1">Merk/Tipe</label><input type="text" id="f-merk" value="${editData?.merk || ''}" class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                            <div><label class="block text-xs font-bold mb-1">SN / Kode</label><input type="text" id="f-sn" value="${editData?.sn || ''}" class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                            <div><label class="block text-xs font-bold mb-1">Jumlah *</label><input type="number" id="f-jumlah" required value="${editData?.jumlah || 1}" class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                            <div><label class="block text-xs font-bold mb-1">Harga Satuan</label><input type="number" id="f-harga" value="${editData?.harga || ''}" class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                            <div><label class="block text-xs font-bold mb-1">Lokasi *</label>
+                                <select id="f-lokasi" required class="w-full p-3 bg-slate-50 border rounded-xl">
                                     <option value="">Pilih Ruangan</option>
                                     ${rooms.map(r => `<option value="${r.name}" ${editData?.lokasi === r.name ? 'selected' : ''}>${r.name}</option>`).join('')}
                                 </select>
                             </div>
                         </div>
-
-                        <div class="space-y-3">
-                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Dokumentasi Foto</label>
-                            <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6">
-                                <div id="foto-preview" class="w-40 h-40 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
-                                    ${editData?.foto ? `<img src="${editData.foto}" class="w-full h-full object-cover">` : '<i class="fas fa-camera text-3xl text-slate-300"></i>'}
-                                </div>
-                                <div class="flex-1 space-y-2">
-                                    <p class="text-xs text-slate-500 font-medium italic">Ambil foto menggunakan kamera atau unggah file. Sistem akan otomatis melakukan kompresi untuk optimalisasi penyimpanan cloud.</p>
-                                    <label class="inline-block px-6 py-3 bg-white border border-blue-500 text-blue-500 rounded-xl font-bold cursor-pointer hover:bg-blue-50 transition-all">
-                                        <i class="fas fa-upload mr-2"></i> Pilih / Ambil Foto
-                                        <input type="file" id="form-foto-input" accept="image/*" class="hidden" onchange="window.processImage(event)">
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex justify-end space-x-4 pt-8 border-t">
-                            <button type="button" onclick="showPage('database')" class="px-6 py-3 text-slate-500 font-bold hover:text-slate-700">Batalkan</button>
-                            <button type="submit" class="px-10 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:shadow-xl transition-all">
-                                ${editData ? 'Simpan Perubahan' : 'Simpan Aset Baru'}
-                            </button>
+                        <div class="pt-6 border-t flex justify-end space-x-3">
+                            <button type="button" onclick="showPage('database')" class="px-6 py-3 font-bold text-slate-400">Batal</button>
+                            <button type="submit" class="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl">Simpan Data</button>
                         </div>
                     </form>
                 </div>
             `;
-
-            let currentBase64 = editData?.foto || "";
-
-            window.processImage = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const MAX_SIZE = 800;
-                        let w = img.width;
-                        let h = img.height;
-                        if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; } }
-                        else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; } }
-                        canvas.width = w; canvas.height = h;
-                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                        currentBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                        document.getElementById('foto-preview').innerHTML = `<img src="${currentBase64}" class="w-full h-full object-cover">`;
-                    };
-                    img.src = ev.target.result;
-                };
-                reader.readAsDataURL(file);
-            };
-
             document.getElementById('asset-form').onsubmit = async (e) => {
                 e.preventDefault();
-                const payload = {
-                    nama: document.getElementById('form-nama').value,
-                    merk: document.getElementById('form-merk').value,
-                    sn: document.getElementById('form-sn').value,
-                    jumlah: Number(document.getElementById('form-jumlah').value),
-                    harga: Number(document.getElementById('form-harga').value),
-                    vendor: document.getElementById('form-vendor').value,
-                    lokasi: document.getElementById('form-lokasi').value,
-                    tanggal: document.getElementById('form-tanggal').value,
-                    foto: currentBase64,
-                    updatedAt: Timestamp.now()
+                const data = {
+                    nama: document.getElementById('f-nama').value,
+                    merk: document.getElementById('f-merk').value,
+                    sn: document.getElementById('f-sn').value,
+                    jumlah: Number(document.getElementById('f-jumlah').value),
+                    harga: Number(document.getElementById('f-harga').value),
+                    lokasi: document.getElementById('f-lokasi').value,
+                    tanggal: new Date().toISOString().split('T')[0]
                 };
-
-                try {
-                    if (editData) {
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', editData.id), payload);
-                        notify("Aset berhasil diperbarui");
-                    } else {
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), payload);
-                        notify("Aset baru berhasil disimpan");
-                    }
-                    showPage('database');
-                } catch (err) {
-                    console.error(err);
-                    notify("Gagal menyimpan data", "error");
-                }
+                if (editData) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', editData.id), data);
+                else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), data);
+                notify("Berhasil disimpan");
+                showPage('database');
             };
         };
 
-        // --- DATABASE RENDERER ---
         const renderDatabase = (container) => {
             container.innerHTML = `
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div class="p-6 border-b flex flex-col sm:flex-row justify-between items-center bg-slate-50 gap-4">
-                        <div class="relative w-full sm:w-80">
-                            <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <input type="text" id="db-search-input" placeholder="Cari nama, SN, atau lokasi..." class="w-full pl-12 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                        </div>
-                        <div class="flex items-center space-x-2 w-full sm:w-auto">
-                            <button onclick="showPage('import-export')" class="flex-1 sm:flex-none px-5 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl font-bold hover:bg-emerald-100 transition-all text-sm">
-                                <i class="fas fa-file-excel mr-2"></i> Export Excel
-                            </button>
-                            <button onclick="showPage('input-aset')" class="flex-1 sm:flex-none px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm shadow-md shadow-blue-100">
-                                <i class="fas fa-plus mr-2"></i> Tambah Aset
-                            </button>
-                        </div>
+                    <div class="p-6 bg-slate-50 border-b flex justify-between items-center">
+                        <input type="text" id="db-search" onkeyup="window.filterTable()" placeholder="Cari aset..." class="px-4 py-2 border rounded-lg w-64">
+                        <button onclick="showPage('input-aset')" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold"><i class="fas fa-plus mr-2"></i>Tambah</button>
                     </div>
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left">
-                            <thead class="bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b">
+                        <table class="w-full text-left" id="asset-table">
+                            <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold">
                                 <tr>
-                                    <th class="px-6 py-4">Informasi Barang</th>
-                                    <th class="px-6 py-4">Lokasi & SN</th>
-                                    <th class="px-6 py-4">Stok</th>
-                                    <th class="px-6 py-4">Harga Unit</th>
-                                    <th class="px-6 py-4 text-center">Kelola</th>
+                                    <th class="px-6 py-4">Nama Aset</th>
+                                    <th class="px-6 py-4">SN / Merk</th>
+                                    <th class="px-6 py-4">Lokasi</th>
+                                    <th class="px-6 py-4">Jumlah</th>
+                                    <th class="px-6 py-4">Aksi</th>
                                 </tr>
                             </thead>
-                            <tbody id="db-table-body">
+                            <tbody class="divide-y">
                                 ${assets.map(a => `
-                                    <tr class="border-b hover:bg-slate-50/50 transition-colors">
-                                        <td class="px-6 py-4">
-                                            <div class="flex items-center space-x-4">
-                                                <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
-                                                    ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : '<i class="fas fa-image text-slate-300"></i>'}
-                                                </div>
-                                                <div class="min-w-0">
-                                                    <p class="font-bold text-slate-800 truncate">${a.nama}</p>
-                                                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-tight">${a.merk || 'No Brand'}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <p class="text-xs font-bold text-slate-600">${a.lokasi}</p>
-                                            <p class="text-[10px] font-mono text-blue-500">${a.sn || 'No SN'}</p>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg">${a.jumlah} Unit</span>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <p class="text-xs font-bold text-slate-700">Rp ${Number(a.harga || 0).toLocaleString()}</p>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <div class="flex justify-center space-x-1">
-                                                <button onclick="window.editAsset('${a.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Edit"><i class="fas fa-edit"></i></button>
-                                                <button onclick="window.deleteAsset('${a.id}')" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Hapus"><i class="fas fa-trash"></i></button>
-                                            </div>
+                                    <tr class="hover:bg-slate-50 transition-colors">
+                                        <td class="px-6 py-4 font-semibold text-slate-800">${a.nama}</td>
+                                        <td class="px-6 py-4 text-slate-500">${a.sn || '-'} / ${a.merk || '-'}</td>
+                                        <td class="px-6 py-4"><span class="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs font-bold">${a.lokasi}</span></td>
+                                        <td class="px-6 py-4 font-bold text-slate-700">${a.jumlah}</td>
+                                        <td class="px-6 py-4 space-x-2">
+                                            <button onclick='window.editAsset("${a.id}")' class="text-blue-500 hover:bg-blue-50 p-2 rounded"><i class="fas fa-edit"></i></button>
+                                            <button onclick='window.deleteAsset("${a.id}")' class="text-red-500 hover:bg-red-50 p-2 rounded"><i class="fas fa-trash"></i></button>
                                         </td>
                                     </tr>
                                 `).join('')}
@@ -564,581 +406,282 @@
                     </div>
                 </div>
             `;
+        };
 
-            document.getElementById('db-search-input').oninput = (e) => {
-                const term = e.target.value.toLowerCase();
-                const rows = assets.filter(a => a.nama.toLowerCase().includes(term) || a.lokasi.toLowerCase().includes(term) || a.sn.toLowerCase().includes(term));
-                document.getElementById('db-table-body').innerHTML = rows.map(a => `
-                    <tr class="border-b hover:bg-slate-50/50 transition-colors">
-                        <td class="px-6 py-4">
-                            <div class="flex items-center space-x-4">
-                                <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
-                                    ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : '<i class="fas fa-image text-slate-300"></i>'}
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="font-bold text-slate-800 truncate">${a.nama}</p>
-                                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-tight">${a.merk || 'No Brand'}</p>
-                                </div>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <p class="text-xs font-bold text-slate-600">${a.lokasi}</p>
-                            <p class="text-[10px] font-mono text-blue-500">${a.sn || 'No SN'}</p>
-                        </td>
-                        <td class="px-6 py-4">
-                            <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg">${a.jumlah} Unit</span>
-                        </td>
-                        <td class="px-6 py-4">
-                            <p class="text-xs font-bold text-slate-700">Rp ${Number(a.harga || 0).toLocaleString()}</p>
-                        </td>
-                        <td class="px-6 py-4">
-                            <div class="flex justify-center space-x-1">
-                                <button onclick="window.editAsset('${a.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"><i class="fas fa-edit"></i></button>
-                                <button onclick="window.deleteAsset('${a.id}')" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all"><i class="fas fa-trash"></i></button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('');
-            };
+        window.filterTable = () => {
+            const term = document.getElementById('db-search').value.toLowerCase();
+            const rows = document.querySelectorAll('#asset-table tbody tr');
+            rows.forEach(row => {
+                row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none';
+            });
         };
 
         window.editAsset = (id) => {
-            const data = assets.find(a => a.id === id);
-            if (!data) return;
-            showPage('input-aset');
-            document.getElementById('page-title').innerText = "Edit Aset";
-            renderInputAset(document.getElementById('content-container'), data);
+            const asset = assets.find(a => a.id === id);
+            renderInputAset(document.getElementById('content-container'), asset);
         };
 
         window.deleteAsset = async (id) => {
-            if (confirm("Hapus data aset ini secara permanen dari cloud?")) {
+            if (confirm("Hapus aset ini?")) {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', id));
-                notify("Aset berhasil dihapus");
+                notify("Dihapus");
             }
         };
 
-        // --- PENCARIAN & SCAN RENDERER ---
         const renderPencarian = (container) => {
             container.innerHTML = `
                 <div class="max-w-2xl mx-auto space-y-6">
-                    <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 text-center">
-                        <h3 class="font-bold text-slate-800 text-lg mb-2">Cari Aset Cepat</h3>
-                        <p class="text-xs text-slate-400 mb-6 font-medium">Gunakan input teks atau scan barcode alat</p>
-                        
-                        <div class="flex items-stretch space-x-3">
-                            <div class="relative flex-1">
-                                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                                <input type="text" id="pencarian-input" placeholder="Ketik nama aset atau SN..." class="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                            </div>
-                            <button id="btn-start-scan" class="px-5 bg-gradient-to-br from-slate-800 to-slate-900 text-white rounded-2xl hover:scale-105 transition-transform">
-                                <i class="fas fa-qrcode text-xl"></i>
-                            </button>
-                        </div>
-                        
-                        <div id="scanner-wrapper" class="hidden mt-6 overflow-hidden rounded-2xl border-4 border-slate-100 relative bg-black aspect-video">
-                            <video id="scan-video" class="w-full h-full object-cover"></video>
-                            <div class="absolute inset-0 border-2 border-blue-500/50 m-10 pointer-events-none rounded-xl"></div>
-                            <button id="btn-stop-scan" class="absolute top-4 right-4 bg-red-500 text-white w-8 h-8 rounded-full flex items-center justify-center"><i class="fas fa-times"></i></button>
+                    <div class="bg-white p-8 rounded-2xl shadow-sm border text-center">
+                        <i class="fas fa-qrcode text-6xl text-blue-600 mb-4"></i>
+                        <h3 class="text-xl font-bold mb-2">Scan Barcode Aset</h3>
+                        <p class="text-slate-500 mb-6">Gunakan kamera untuk memindai kode inventaris</p>
+                        <button id="start-scan" class="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold">Mulai Kamera</button>
+                        <div id="scanner-container" class="mt-4 hidden">
+                            <video id="video" class="w-full rounded-xl border"></video>
                         </div>
                     </div>
-
-                    <div id="pencarian-result" class="hidden animate-in fade-in slide-in-from-bottom-4 duration-300"></div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border">
+                        <input type="text" id="manual-search" placeholder="Atau ketik Nama/SN di sini..." class="w-full p-4 bg-slate-50 border rounded-xl text-center font-bold">
+                        <div id="search-results" class="mt-4 space-y-2"></div>
+                    </div>
                 </div>
             `;
-
-            let reader = null;
-            const startScan = async () => {
-                const wrapper = document.getElementById('scanner-wrapper');
-                wrapper.classList.remove('hidden');
-                reader = new ZXing.BrowserMultiFormatReader();
-                try {
-                    reader.decodeFromVideoDevice(null, 'scan-video', (res, err) => {
-                        if (res) {
-                            document.getElementById('pencarian-input').value = res.text;
-                            doSearch(res.text);
-                            stopScan();
-                        }
-                    });
-                } catch(e) { notify("Kamera tidak dapat diakses", "error"); }
+            const input = document.getElementById('manual-search');
+            input.oninput = () => {
+                const term = input.value.toLowerCase();
+                if (!term) { document.getElementById('search-results').innerHTML = ''; return; }
+                const filtered = assets.filter(a => a.nama.toLowerCase().includes(term) || a.sn.toLowerCase().includes(term));
+                document.getElementById('search-results').innerHTML = filtered.map(a => `
+                    <div class="p-4 border rounded-xl flex justify-between items-center">
+                        <div><p class="font-bold">${a.nama}</p><p class="text-xs text-slate-400">Loc: ${a.lokasi}</p></div>
+                        <button onclick="window.editAsset('${a.id}')" class="text-blue-500 font-bold">Detail</button>
+                    </div>
+                `).join('');
             };
-
-            const stopScan = () => {
-                if (reader) {
-                    reader.reset();
-                    document.getElementById('scanner-wrapper').classList.add('hidden');
-                }
-            };
-
-            const doSearch = (val) => {
-                const resContainer = document.getElementById('pencarian-result');
-                if (!val) { resContainer.classList.add('hidden'); return; }
-
-                const found = assets.find(a => a.sn === val || a.nama.toLowerCase().includes(val.toLowerCase()));
-                if (found) {
-                    const history = mutations.filter(m => m.assetId === found.id).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    resContainer.innerHTML = `
-                        <div class="bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden">
-                            <div class="md:flex">
-                                <div class="md:w-1/3 bg-slate-50 p-6 flex items-center justify-center border-r border-slate-100">
-                                    <div class="w-full aspect-square rounded-2xl bg-white shadow-inner overflow-hidden flex items-center justify-center">
-                                        ${found.foto ? `<img src="${found.foto}" class="w-full h-full object-cover">` : '<i class="fas fa-image text-4xl text-slate-200"></i>'}
-                                    </div>
-                                </div>
-                                <div class="p-8 md:w-2/3 space-y-6">
-                                    <div>
-                                        <div class="flex justify-between items-start mb-2">
-                                            <h3 class="text-2xl font-black text-slate-800 leading-tight">${found.nama}</h3>
-                                            <span class="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-[10px] font-bold uppercase tracking-widest">AKTIF</span>
-                                        </div>
-                                        <p class="text-xs font-mono text-slate-400">SN: ${found.sn || 'Tidak ada serial number'}</p>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-6 border-y border-slate-50 py-6">
-                                        <div>
-                                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lokasi Sekarang</p>
-                                            <p class="text-sm font-bold text-slate-700">${found.lokasi}</p>
-                                        </div>
-                                        <div>
-                                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Stok</p>
-                                            <p class="text-sm font-bold text-slate-700">${found.jumlah} Unit</p>
-                                        </div>
-                                        <div>
-                                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tipe / Merk</p>
-                                            <p class="text-sm font-bold text-slate-700">${found.merk || '-'}</p>
-                                        </div>
-                                        <div>
-                                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Nilai Aset</p>
-                                            <p class="text-sm font-bold text-slate-700">Rp ${Number(found.harga || 0).toLocaleString()}</p>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 class="text-xs font-bold text-slate-800 mb-4 flex items-center"><i class="fas fa-history mr-2 text-indigo-400"></i> Histori Aset</h4>
-                                        <div class="space-y-4 max-h-40 overflow-y-auto pr-2">
-                                            <div class="relative pl-6 pb-2 border-l-2 border-emerald-500/30">
-                                                <div class="absolute -left-1.5 top-0 w-3 h-3 rounded-full bg-emerald-500"></div>
-                                                <p class="text-xs font-bold text-slate-700">Penerimaan Barang Pertama</p>
-                                                <p class="text-[10px] text-slate-400">${found.tanggal || 'N/A'} • Ke: ${found.lokasi}</p>
-                                            </div>
-                                            ${history.map(h => `
-                                                <div class="relative pl-6 pb-2 border-l-2 border-blue-500/30">
-                                                    <div class="absolute -left-1.5 top-0 w-3 h-3 rounded-full bg-blue-500"></div>
-                                                    <p class="text-xs font-bold text-slate-700">${h.jenis} Massal</p>
-                                                    <p class="text-[10px] text-slate-400">${h.tanggal} • ${h.asal} <i class="fas fa-arrow-right mx-1"></i> ${h.lokasiTujuan}</p>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    resContainer.innerHTML = `<div class="bg-slate-100 p-8 rounded-2xl text-center text-slate-400 italic">Data aset tidak ditemukan dalam database cloud</div>`;
-                }
-                resContainer.classList.remove('hidden');
-            };
-
-            document.getElementById('btn-start-scan').onclick = startScan;
-            document.getElementById('btn-stop-scan').onclick = stopScan;
-            document.getElementById('pencarian-input').oninput = (e) => doSearch(e.target.value);
         };
 
-        // --- MUTASI BARANG RENDERER ---
         const renderMutasi = (container) => {
             container.innerHTML = `
-                <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border p-8">
-                    <form id="mutasi-form" class="space-y-6">
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Pilih Barang</label>
-                            <select id="mutasi-asset-id" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                                <option value="">Cari aset yang akan dimutasi...</option>
-                                ${assets.map(a => `<option value="${a.id}">${a.nama} [${a.sn}] - Stok: ${a.jumlah} - Ruang: ${a.lokasi}</option>`).join('')}
+                <div class="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border">
+                    <h3 class="text-xl font-bold mb-6">Form Mutasi Barang</h3>
+                    <form id="mutation-form" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold mb-1">Barang yang Dipindah</label>
+                            <select id="m-asset" required class="w-full p-3 bg-slate-50 border rounded-xl">
+                                <option value="">Pilih Aset</option>
+                                ${assets.map(a => `<option value="${a.id}">${a.nama} (${a.lokasi})</option>`).join('')}
                             </select>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Jenis Pemindahan</label>
-                                <select id="mutasi-jenis" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                                    <option value="Mutasi">Mutasi Antar Ruang</option>
-                                    <option value="Rusak">Rusak / Perbaikan</option>
-                                    <option value="Dipinjam">Dipinjam Luar</option>
-                                    <option value="Digudangkan">Digudangkan</option>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold mb-1">Tujuan</label>
+                                <select id="m-tujuan" required class="w-full p-3 bg-slate-50 border rounded-xl">
+                                    <option value="">Ruang Tujuan</option>
+                                    ${rooms.map(r => `<option value="${r.name}">${r.name}</option>`).join('')}
                                 </select>
                             </div>
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Jumlah Mutasi</label>
-                                <input type="number" id="mutasi-qty" required min="1" value="1" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+                            <div>
+                                <label class="block text-xs font-bold mb-1">Jumlah</label>
+                                <input type="number" id="m-qty" value="1" class="w-full p-3 bg-slate-50 border rounded-xl">
                             </div>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Lokasi Akhir / Tujuan</label>
-                            <select id="mutasi-tujuan" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                                <option value="">Pilih Tujuan Mutasi...</option>
-                                ${rooms.map(r => `<option value="${r.name}">${r.name}</option>`).join('')}
+                        <div>
+                            <label class="block text-xs font-bold mb-1">Alasan / Jenis</label>
+                            <select id="m-jenis" class="w-full p-3 bg-slate-50 border rounded-xl">
+                                <option>Mutasi Internal</option>
+                                <option>Perbaikan (Rusak)</option>
+                                <option>Peminjaman</option>
                             </select>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Keterangan Mutasi</label>
-                            <textarea id="mutasi-ket" rows="3" placeholder="Alasan pemindahan barang..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
-                        </div>
-                        <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center">
-                            <i class="fas fa-paper-plane mr-2"></i> Proses Mutasi Aset
-                        </button>
+                        <button type="submit" class="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg mt-4">Proses Perpindahan</button>
                     </form>
                 </div>
             `;
-
-            document.getElementById('mutasi-form').onsubmit = async (e) => {
+            document.getElementById('mutation-form').onsubmit = async (e) => {
                 e.preventDefault();
-                const aid = document.getElementById('mutasi-asset-id').value;
-                const asset = assets.find(a => a.id === aid);
-                const qty = Number(document.getElementById('mutasi-qty').value);
-                const tuju = document.getElementById('mutasi-tujuan').value;
+                const assetId = document.getElementById('m-asset').value;
+                const asset = assets.find(a => a.id === assetId);
+                const tujuan = document.getElementById('m-tujuan').value;
+                const qty = Number(document.getElementById('m-qty').value);
+                const jenis = document.getElementById('m-jenis').value;
 
-                if (qty > asset.jumlah) { notify("Stok tidak cukup!", "error"); return; }
-                if (tuju === asset.lokasi) { notify("Tujuan tidak boleh sama dengan asal!", "error"); return; }
+                if (!asset) return;
+                
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', assetId), { lokasi: tujuan });
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), {
+                    namaAsset: asset.nama,
+                    sn: asset.sn,
+                    asal: asset.lokasi,
+                    lokasiTujuan: tujuan,
+                    jumlah: qty,
+                    jenis: jenis,
+                    tanggal: new Date().toLocaleDateString('id-ID')
+                });
 
-                try {
-                    // Update Stok Aset
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', aid), {
-                        lokasi: tuju,
-                        updatedAt: Timestamp.now()
-                    });
-
-                    // Log Mutasi
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), {
-                        assetId: aid,
-                        namaAsset: asset.nama,
-                        sn: asset.sn,
-                        asal: asset.lokasi,
-                        lokasiTujuan: tuju,
-                        jumlah: qty,
-                        jenis: document.getElementById('mutasi-jenis').value,
-                        keterangan: document.getElementById('mutasi-ket').value,
-                        tanggal: new Date().toLocaleDateString('id-ID'),
-                        timestamp: new Date().toISOString()
-                    });
-
-                    notify("Mutasi berhasil diproses");
-                    showPage('data-mutasi');
-                } catch(err) { notify("Gagal proses mutasi", "error"); }
+                notify("Mutasi berhasil dicatat");
+                showPage('data-mutasi');
             };
         };
 
-        // --- MANAJEMEN RUANGAN RENDERER ---
-        const renderRuangan = (container) => {
-            container.innerHTML = `
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 no-print">
-                    <div class="flex items-center space-x-4 w-full sm:w-auto">
-                        <label class="text-xs font-bold text-slate-500 uppercase">Filter Ruang:</label>
-                        <select id="ruangan-filter" class="flex-1 sm:w-60 p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                            <option value="">Tampilkan Semua</option>
-                            ${rooms.map(r => `<option value="${r.name}">${r.name}</option>`).join('')}
-                        </select>
-                    </div>
-                    <button onclick="window.cetakSensus()" class="w-full sm:w-auto px-6 py-2.5 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all text-sm">
-                        <i class="fas fa-print mr-2"></i> Cetak PDF Sensus
-                    </button>
-                </div>
-                <div id="ruangan-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
-            `;
-
-            const doFilter = (val) => {
-                const filtered = val ? assets.filter(a => a.lokasi === val) : assets;
-                document.getElementById('ruangan-grid').innerHTML = filtered.map(a => `
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-                        <div class="aspect-video bg-slate-50 relative overflow-hidden cursor-pointer" onclick="window.openPreview('${a.foto}', '${a.nama}')">
-                            ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : '<div class="w-full h-full flex items-center justify-center text-slate-200"><i class="fas fa-image text-4xl"></i></div>'}
-                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
-                                <i class="fas fa-expand-alt text-2xl"></i>
-                            </div>
-                        </div>
-                        <div class="p-5">
-                            <h4 class="font-bold text-slate-800 mb-1 truncate">${a.nama}</h4>
-                            <div class="flex justify-between items-center text-[10px] font-bold">
-                                <span class="bg-blue-50 text-blue-500 px-2 py-0.5 rounded-lg font-mono">${a.sn || 'No SN'}</span>
-                                <span class="text-slate-400 uppercase tracking-wider">${a.jumlah} UNIT</span>
-                            </div>
-                            <div class="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ruang: ${a.lokasi}</span>
-                                <button onclick="window.editAsset('${a.id}')" class="text-blue-400 hover:text-blue-600"><i class="fas fa-arrow-right"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
-                if (filtered.length === 0) {
-                    document.getElementById('ruangan-grid').innerHTML = `<div class="col-span-full py-20 text-center text-slate-400 italic">Tidak ada aset terdaftar di ruangan ini</div>`;
-                }
-            };
-
-            document.getElementById('ruangan-filter').onchange = (e) => doFilter(e.target.value);
-            doFilter("");
-        };
-
-        window.openPreview = (src, title) => {
-            const container = document.getElementById('modal-container');
-            const content = document.getElementById('modal-content');
-            container.classList.remove('hidden');
-            content.innerHTML = `
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center">
-                        <h3 class="font-bold text-slate-800">${title}</h3>
-                        <button onclick="window.closeModal()" class="text-slate-400 hover:text-red-500 text-xl"><i class="fas fa-times"></i></button>
-                    </div>
-                    <div class="rounded-2xl overflow-hidden shadow-2xl bg-slate-100">
-                        ${src ? `<img src="${src}" class="w-full h-auto">` : '<div class="h-64 flex items-center justify-center">Tidak ada foto</div>'}
-                    </div>
-                </div>
-            `;
-        };
-
-        window.closeModal = () => document.getElementById('modal-container').classList.add('hidden');
-
-        // --- DATA MUTASI RENDERER ---
         const renderDataMutasi = (container) => {
             container.innerHTML = `
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left">
-                            <thead class="bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b">
+                <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                            <tr><th class="p-6">Tanggal</th><th>Aset</th><th>Dari → Ke</th><th>Keterangan</th></tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            ${mutations.slice().reverse().map(m => `
                                 <tr>
-                                    <th class="px-6 py-4">Tgl & Jenis</th>
-                                    <th class="px-6 py-4">Barang</th>
-                                    <th class="px-6 py-4">Asal -> Tujuan</th>
-                                    <th class="px-6 py-4">Ket</th>
+                                    <td class="p-6 text-sm">${m.tanggal}</td>
+                                    <td class="text-sm font-bold">${m.namaAsset}</td>
+                                    <td class="text-sm">${m.asal} <i class="fas fa-arrow-right mx-2 text-slate-300"></i> ${m.lokasiTujuan}</td>
+                                    <td><span class="text-[10px] bg-slate-100 px-2 py-1 rounded-full">${m.jenis}</span></td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                ${mutations.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(m => `
-                                    <tr class="border-b hover:bg-slate-50/30">
-                                        <td class="px-6 py-4">
-                                            <p class="text-xs font-bold text-slate-700">${m.tanggal}</p>
-                                            <span class="text-[9px] font-black uppercase text-indigo-500 tracking-tighter">${m.jenis}</span>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <p class="text-xs font-bold text-slate-800">${m.namaAsset}</p>
-                                            <p class="text-[10px] font-mono text-slate-400">${m.sn || '-'}</p>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <div class="flex items-center text-[10px] font-bold text-slate-500">
-                                                <span class="bg-slate-100 px-2 py-0.5 rounded">${m.asal}</span>
-                                                <i class="fas fa-chevron-right mx-2 text-slate-300"></i>
-                                                <span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded">${m.lokasiTujuan}</span>
-                                            </div>
-                                        </td>
-                                        <td class="px-6 py-4 italic text-[10px] text-slate-400">${m.keterangan || '-'}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
+                            `).join('')}
+                        </tbody>
+                    </table>
                 </div>
             `;
         };
 
-        // --- LAPORAN RENDERER ---
         const renderLaporan = (container) => {
             container.innerHTML = `
-                <div class="max-w-md mx-auto space-y-6">
-                    <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-                        <div class="text-center mb-8">
-                            <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
-                                <i class="fas fa-file-pdf"></i>
-                            </div>
-                            <h3 class="font-bold text-slate-800 text-lg">Cetak Rekap Bulanan</h3>
-                            <p class="text-xs text-slate-400">Pilih periode laporan mutasi aset</p>
-                        </div>
-                        <div class="space-y-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-bold text-slate-500 uppercase">Bulan</label>
-                                    <select id="lap-bulan" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
-                                        <option value="01">Januari</option><option value="02">Februari</option><option value="03">Maret</option>
-                                        <option value="04">April</option><option value="05">Mei</option><option value="06">Juni</option>
-                                        <option value="07">Juli</option><option value="08">Agustus</option><option value="09">September</option>
-                                        <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
-                                    </select>
-                                </div>
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-bold text-slate-500 uppercase">Tahun</label>
-                                    <select id="lap-tahun" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
-                                        <option>2024</option><option>2025</option><option>2026</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <button onclick="window.cetakBulanan()" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-xl hover:bg-black transition-all">
-                                <i class="fas fa-print mr-2"></i> Download Laporan PDF
-                            </button>
-                        </div>
+                <div class="max-w-xl mx-auto space-y-6">
+                    <div class="bg-white p-8 rounded-2xl shadow-sm border flex items-center justify-between">
+                        <div><h4 class="font-bold">Laporan Inventaris Aktif</h4><p class="text-xs text-slate-400">Download seluruh data aset (.pdf)</p></div>
+                        <button onclick="window.generatePDF()" class="bg-red-600 text-white px-6 py-2 rounded-lg font-bold"><i class="fas fa-file-pdf mr-2"></i>Cetak</button>
+                    </div>
+                    <div class="bg-white p-8 rounded-2xl shadow-sm border flex items-center justify-between">
+                        <div><h4 class="font-bold">Daftar Inventaris Ruangan</h4><p class="text-xs text-slate-400">Pilih ruangan tertentu</p></div>
+                        <select id="lap-ruang" class="p-2 border rounded-lg">
+                            ${rooms.map(r => `<option>${r.name}</option>`).join('')}
+                        </select>
+                        <button onclick="window.generatePDF('room')" class="bg-slate-900 text-white px-6 py-2 rounded-lg font-bold">Cetak</button>
                     </div>
                 </div>
             `;
         };
 
-        // --- MASTER RUANGAN RENDERER ---
+        window.generatePDF = (type) => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            let data = assets;
+            let title = "LAPORAN INVENTARIS ALAT MEDIS";
+
+            if (type === 'room') {
+                const r = document.getElementById('lap-ruang').value;
+                data = assets.filter(a => a.lokasi === r);
+                title += ` - RUANG ${r}`;
+            }
+
+            doc.setFontSize(14); doc.text(title, 105, 15, { align: 'center' });
+            doc.autoTable({
+                startY: 25,
+                head: [['Nama Alat', 'Merk', 'SN', 'Lokasi', 'Qty']],
+                body: data.map(a => [a.nama, a.merk, a.sn, a.lokasi, a.jumlah]),
+                headStyles: { fillColor: [30, 41, 59] }
+            });
+            doc.save(`Laporan_Alkes_${new Date().getTime()}.pdf`);
+        };
+
+        const renderImportExport = (container) => {
+            container.innerHTML = `
+                <div class="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-sm border space-y-8">
+                    <div>
+                        <h3 class="font-bold mb-4">Export Data</h3>
+                        <button onclick="window.exportExcel()" class="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl"><i class="fas fa-file-excel mr-2"></i>Download Excel (.xlsx)</button>
+                    </div>
+                    <div class="border-t pt-8">
+                        <h3 class="font-bold mb-4">Import Data</h3>
+                        <input type="file" id="excel-file" accept=".xlsx, .xls" class="block w-full text-sm text-slate-500 mb-4">
+                        <button onclick="window.importExcel()" class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl">Proses Import</button>
+                    </div>
+                </div>
+            `;
+        };
+
+        window.exportExcel = () => {
+            const ws = XLSX.utils.json_to_sheet(assets);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Assets");
+            XLSX.writeFile(wb, "Inventaris_Alkes.xlsx");
+        };
+
         const renderMasterRuangan = (container) => {
             container.innerHTML = `
                 <div class="max-w-xl mx-auto space-y-6">
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border flex space-x-2">
-                        <input type="text" id="new-room-name" placeholder="Tambah nama ruangan baru..." class="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
-                        <button onclick="window.addRoom()" class="px-6 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all">
-                            <i class="fas fa-plus"></i>
-                        </button>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border">
+                        <h3 class="font-bold mb-4">Tambah Ruangan</h3>
+                        <div class="flex space-x-2">
+                            <input type="text" id="new-room-name" placeholder="Nama ruangan baru..." class="flex-1 p-3 bg-slate-50 border rounded-xl">
+                            <button onclick="window.addRoom()" class="bg-blue-600 text-white px-6 rounded-xl font-bold">Simpan</button>
+                        </div>
                     </div>
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                        <table class="w-full text-left">
-                            <thead class="bg-slate-50 border-b">
-                                <tr>
-                                    <th class="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nama Ruangan</th>
-                                    <th class="px-6 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rooms.map(r => `
-                                    <tr class="border-b hover:bg-slate-50 transition-colors">
-                                        <td class="px-6 py-4 text-sm font-bold text-slate-700">${r.name}</td>
-                                        <td class="px-6 py-4 flex justify-center">
-                                            <button onclick="window.delRoom('${r.id}')" class="p-2 text-red-400 hover:bg-red-50 rounded-lg"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                    <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                        <div class="p-4 bg-slate-50 font-bold border-b">Daftar Ruangan</div>
+                        <div class="divide-y">
+                            ${rooms.map(r => `
+                                <div class="p-4 flex justify-between items-center hover:bg-slate-50">
+                                    <span class="font-semibold">${r.name}</span>
+                                    <button onclick="window.deleteRoom('${r.id}')" class="text-red-400"><i class="fas fa-times"></i></button>
+                                </div>
+                            `).join('')}
+                        </div>
                     </div>
                 </div>
             `;
         };
 
         window.addRoom = async () => {
-            const el = document.getElementById('new-room-name');
-            if (!el.value) return;
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { name: el.value });
-            el.value = "";
-            notify("Ruangan baru ditambahkan");
+            const name = document.getElementById('new-room-name').value;
+            if (!name) return;
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { name });
+            document.getElementById('new-room-name').value = '';
+            notify("Ruangan ditambahkan");
         };
 
-        window.delRoom = async (id) => {
-            if (confirm("Hapus ruangan ini? Aset yang ada tetap tersimpan namun lokasi akan menjadi usang.")) {
+        window.deleteRoom = async (id) => {
+            if (confirm("Hapus ruangan ini?")) {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', id));
-                notify("Ruangan berhasil dihapus");
+                notify("Dihapus");
             }
         };
 
-        // --- IMPORT / EXPORT RENDERER ---
-        const renderImportExport = (container) => {
+        const renderRuangan = (container) => {
             container.innerHTML = `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                    <div class="bg-white p-10 rounded-3xl shadow-sm border border-slate-100 text-center flex flex-col items-center">
-                        <div class="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center text-3xl mb-6">
-                            <i class="fas fa-file-excel"></i>
-                        </div>
-                        <h4 class="font-bold text-slate-800 text-lg mb-2">Export ke Excel</h4>
-                        <p class="text-xs text-slate-400 mb-8 font-medium">Cadangkan data cloud ke format spreadsheet secara lokal</p>
-                        <button onclick="window.doExport()" class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all">Unduh .xlsx</button>
-                    </div>
-                    <div class="bg-white p-10 rounded-3xl shadow-sm border border-slate-100 text-center flex flex-col items-center">
-                        <div class="w-20 h-20 bg-blue-50 text-blue-500 rounded-3xl flex items-center justify-center text-3xl mb-6">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                        </div>
-                        <h4 class="font-bold text-slate-800 text-lg mb-2">Import Masal</h4>
-                        <p class="text-xs text-slate-400 mb-8 font-medium">Unggah data aset dalam jumlah banyak secara sekaligus</p>
-                        <input type="file" id="excel-file" class="hidden" onchange="window.doImport(event)">
-                        <button onclick="document.getElementById('excel-file').click()" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">Pilih File</button>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    ${rooms.map(r => {
+                        const count = assets.filter(a => a.lokasi === r.name).length;
+                        return `
+                            <div onclick="window.viewRoomAssets('${r.name}')" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md cursor-pointer transition-all">
+                                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl mb-4"><i class="fas fa-door-open"></i></div>
+                                <h4 class="font-bold text-slate-800 text-lg">${r.name}</h4>
+                                <p class="text-slate-400 text-sm font-medium">${count} Aset Terdata</p>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
             `;
         };
 
-        window.doExport = () => {
-            const data = assets.map(({id, foto, ...r}) => r);
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Assets");
-            XLSX.writeFile(wb, `SIMARS_EXPORT_${new Date().toISOString().slice(0,10)}.xlsx`);
-        };
-
-        window.doImport = (e) => {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = async (ev) => {
-                const bstr = ev.target.result;
-                const wb = XLSX.read(bstr, {type: 'binary'});
-                const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-                for(let item of data) {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), {
-                        ...item,
-                        jumlah: Number(item.jumlah || 1),
-                        harga: Number(item.harga || 0),
-                        updatedAt: Timestamp.now()
-                    });
-                }
-                notify(`${data.length} data berhasil diimport`);
-            };
-            reader.readAsBinaryString(file);
-        };
-
-        // --- PDF ENGINE ---
-        window.cetakSensus = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
-            const room = document.getElementById('ruangan-filter')?.value || "SEMUA RUANGAN";
-            const filtered = room !== "SEMUA RUANGAN" ? assets.filter(a => a.lokasi === room) : assets;
-
-            // Kop
-            doc.setFontSize(14); doc.setFont("helvetica", "bold");
-            doc.text("RSU DADI KELUARGA PURWOKERTO", 105, 15, {align:'center'});
-            doc.setFontSize(8); doc.setFont("helvetica", "normal");
-            doc.text("Jl. Sultan Agung No:8A Teluk-Purwokerto Selatan", 105, 20, {align:'center'});
-            doc.line(20, 22, 190, 22);
-
-            doc.setFontSize(10); doc.text(`LAPORAN SENSUS ASET - ${room}`, 20, 30);
-            doc.text(`Dicetak Pada: ${new Date().toLocaleString()}`, 20, 35);
-
-            doc.autoTable({
-                startY: 40,
-                head: [['No', 'Nama Barang', 'Merk', 'SN', 'Jml', 'Lokasi']],
-                body: filtered.map((a,i) => [i+1, a.nama, a.merk||'-', a.sn||'-', a.jumlah, a.lokasi]),
-                theme: 'striped',
-                headStyles: { fillColor: [15, 23, 42] }
-            });
-
-            const finalY = doc.lastAutoTable.finalY + 15;
-            doc.text("Pencatat Barang,", 30, finalY);
-            doc.text("Kepala Ruang/Koordinator,", 130, finalY);
-            doc.text("________________", 30, finalY + 20);
-            doc.text("________________", 130, finalY + 20);
-
-            doc.save(`Sensus_${room}.pdf`);
-        };
-
-        window.cetakBulanan = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'mm', 'a4');
-            const m = document.getElementById('lap-bulan').value;
-            const y = document.getElementById('lap-tahun').value;
-
-            doc.setFontSize(14); doc.text("LAPORAN REKAPITULASI MUTASI BULANAN", 148, 15, {align:'center'});
-            doc.setFontSize(10); doc.text(`Periode: ${m} / ${y}`, 148, 22, {align:'center'});
-
-            doc.autoTable({
-                startY: 30,
-                head: [['Tanggal', 'Barang', 'Serial Number', 'Asal', 'Tujuan', 'Jenis', 'Qty']],
-                body: mutations.map(h => [h.tanggal, h.namaAsset, h.sn, h.asal, h.lokasiTujuan, h.jenis, h.jumlah]),
-                headStyles: { fillColor: [59, 130, 246] }
-            });
-
-            doc.save(`Mutasi_${m}_${y}.pdf`);
-        };
-
-        // --- UTILS ---
-        const notify = (msg, type = "success") => {
-            const div = document.createElement('div');
-            div.className = `fixed bottom-8 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold shadow-2xl z-[1000] animate-in fade-in slide-in-from-bottom-10 duration-300 ${type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`;
-            div.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-2"></i> ${msg}`;
-            document.body.appendChild(div);
-            setTimeout(() => {
-                div.classList.add('animate-out', 'fade-out', 'slide-out-to-bottom-10');
-                setTimeout(() => div.remove(), 300);
-            }, 3000);
+        window.viewRoomAssets = (roomName) => {
+            const filtered = assets.filter(a => a.lokasi === roomName);
+            document.getElementById('modal-container').classList.remove('hidden');
+            document.getElementById('modal-content').innerHTML = `
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">Aset di Ruang ${roomName}</h3>
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-400 text-2xl">&times;</button>
+                </div>
+                <div class="space-y-4">
+                    ${filtered.map(a => `
+                        <div class="p-4 bg-slate-50 rounded-xl flex justify-between items-center">
+                            <div><p class="font-bold">${a.nama}</p><p class="text-xs text-slate-400">SN: ${a.sn || '-'}</p></div>
+                            <span class="font-bold text-blue-600">${a.jumlah} Unit</span>
+                        </div>
+                    `).join('') || '<p class="text-center py-10 text-slate-400">Ruangan kosong</p>'}
+                </div>
+            `;
         };
 
     </script>
