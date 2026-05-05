@@ -1,24 +1,317 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, collection, doc, setDoc, getDoc, 
-  query, onSnapshot, addDoc, updateDoc, deleteDoc, 
-  runTransaction 
-} from 'firebase/firestore';
-import { 
-  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
-} from 'firebase/auth';
-import { 
-  PlusCircle, Database, Search, MoveHorizontal, 
-  Home, MapPin, FileText, Download, Upload, 
-  Camera, Edit3, Trash2, Printer, Scan,
-  ChevronRight, LayoutDashboard, Settings,
-  AlertTriangle, CheckCircle, Package, ArrowRightLeft,
-  X
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAMS PRO - Hospital Asset Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode/html5-qrcode.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .sidebar-item.active { background-color: #2563eb; color: white; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2); }
+        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 8rem; color: rgba(0, 0, 0, 0.03); pointer-events: none; z-index: 0; white-space: nowrap; font-weight: 900; text-transform: uppercase; }
+        .running-text-container { background: #1e293b; color: #fbbf24; padding: 8px 0; overflow: hidden; position: sticky; top: 0; z-index: 50; }
+        .running-text { display: inline-block; white-space: nowrap; animation: marquee 30s linear infinite; }
+        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+        .tab-content.hidden { display: none; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col">
 
-// --- CONFIGURATION & FIREBASE ---
-const firebaseConfig = {
+    <div class="watermark">HOSPITAL ASSET</div>
+
+    <div class="running-text-container shadow-md">
+        <div class="running-text font-bold uppercase tracking-widest">
+            Sistem Inventarisasi Aset Medis Terpadu • Harap Verifikasi Kondisi Alat Secara Berkala • Gunakan Menu Mutasi Untuk Pemindahan Barang • Lakukan Sensus Rutin Setiap Bulan
+        </div>
+    </div>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-72 bg-white border-r border-slate-200 flex flex-col z-40">
+            <div class="p-6 border-b">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 p-2 rounded-lg">
+                        <i class="fas fa-hospital text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-slate-800 leading-tight">HAMS PRO</h1>
+                        <p class="text-xs text-slate-500">Asset Management</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
+                <p class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Utama</p>
+                <button onclick="switchTab('dashboard')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all active" id="btn-dashboard">
+                    <i class="fas fa-chart-line w-5"></i> Dashboard
+                </button>
+                <button onclick="switchTab('input-aset')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-input-aset">
+                    <i class="fas fa-plus-circle w-5"></i> Input Aset
+                </button>
+                <button onclick="switchTab('import-export')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-import-export">
+                    <i class="fas fa-file-excel w-5"></i> Import/Export
+                </button>
+                
+                <p class="px-4 py-2 mt-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inventori</p>
+                <button onclick="switchTab('database')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-database">
+                    <i class="fas fa-database w-5"></i> Database Aset
+                </button>
+                <button onclick="switchTab('pencarian')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-pencarian">
+                    <i class="fas fa-search w-5"></i> Pencarian & Scan
+                </button>
+                <button onclick="switchTab('manajemen-ruangan')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-manajemen-ruangan">
+                    <i class="fas fa-door-open w-5"></i> Manajemen Ruangan
+                </button>
+
+                <p class="px-4 py-2 mt-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mutasi & Kondisi</p>
+                <button onclick="switchTab('input-mutasi')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-input-mutasi">
+                    <i class="fas fa-exchange-alt w-5"></i> Mutasi Barang
+                </button>
+                <button onclick="switchTab('database-mutasi')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-database-mutasi">
+                    <i class="fas fa-history w-5"></i> Database Mutasi
+                </button>
+
+                <p class="px-4 py-2 mt-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Konfigurasi</p>
+                <button onclick="switchTab('master-ruangan')" class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 transition-all" id="btn-master-ruangan">
+                    <i class="fas fa-cog w-5"></i> Master Ruangan
+                </button>
+            </nav>
+            <div class="p-6 border-t">
+                <div id="auth-status" class="flex items-center gap-2 text-xs text-slate-500">
+                    <div class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></div> Menghubungkan Cloud...
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto relative p-8 custom-scrollbar">
+            
+            <!-- Tab: Dashboard -->
+            <section id="tab-dashboard" class="tab-content space-y-6">
+                <div class="flex justify-between items-end">
+                    <div>
+                        <h2 class="text-3xl font-bold text-slate-800">Dashboard</h2>
+                        <p class="text-slate-500">Ringkasan aset rumah sakit saat ini.</p>
+                    </div>
+                    <div id="current-date" class="text-slate-500 font-medium bg-white px-4 py-2 rounded-lg border"></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><i class="fas fa-boxes-stacked text-xl"></i></div>
+                        <div><p class="text-sm text-slate-500">Total Unit</p><p class="text-2xl font-bold text-slate-800" id="stat-total-aset">0</p></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center"><i class="fas fa-stethoscope text-xl"></i></div>
+                        <div><p class="text-sm text-slate-500">Jenis Alat</p><p class="text-2xl font-bold text-slate-800" id="stat-alat-medis">0</p></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center"><i class="fas fa-map-marker-alt text-xl"></i></div>
+                        <div><p class="text-sm text-slate-500">Ruangan</p><p class="text-2xl font-bold text-slate-800" id="stat-total-ruangan">0</p></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center"><i class="fas fa-tools text-xl"></i></div>
+                        <div><p class="text-sm text-slate-500">Mutasi</p><p class="text-2xl font-bold text-slate-800" id="stat-total-mutasi">0</p></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Input Aset -->
+            <section id="tab-input-aset" class="tab-content hidden space-y-6">
+                <div class="bg-white rounded-2xl border shadow-sm p-8 max-w-4xl mx-auto">
+                    <h2 class="text-2xl font-bold text-slate-800 mb-6">Form Input Aset Baru</h2>
+                    <form id="form-input-aset" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Nama Barang *</label>
+                                <input type="text" name="nama_barang" required class="w-full px-4 py-2.5 rounded-lg border">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Merk / Tipe *</label>
+                                <input type="text" name="merk" required class="w-full px-4 py-2.5 rounded-lg border">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Lokasi (Wajib) *</label>
+                                <select name="lokasi" required class="select-ruangan w-full px-4 py-2.5 rounded-lg border"></select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Jumlah *</label>
+                                <input type="number" name="jumlah" required min="1" class="w-full px-4 py-2.5 rounded-lg border" value="1">
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-slate-700">Foto Barang</label>
+                            <div class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:bg-slate-50 relative">
+                                <input type="file" id="input-photo" accept="image/*" capture="environment" class="absolute inset-0 opacity-0 cursor-pointer">
+                                <div id="preview-placeholder">
+                                    <i class="fas fa-camera text-3xl text-slate-300 mb-2"></i>
+                                    <p class="text-xs text-slate-400 uppercase">Ambil Foto atau Klik Disini</p>
+                                </div>
+                                <img id="photo-preview" class="hidden max-h-48 mx-auto rounded-lg">
+                            </div>
+                            <input type="hidden" id="foto-base64">
+                        </div>
+                        <button type="submit" class="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Simpan Aset</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Tab: Database -->
+            <section id="tab-database" class="tab-content hidden space-y-6">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl border">
+                    <h2 class="text-xl font-bold text-slate-800">Database Aset</h2>
+                    <input type="text" id="db-search" placeholder="Cari aset..." class="px-4 py-2 border rounded-lg w-64">
+                </div>
+                <div class="bg-white rounded-xl border shadow-sm overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b">
+                            <tr>
+                                <th class="px-6 py-4">Foto</th>
+                                <th class="px-6 py-4">Nama Barang</th>
+                                <th class="px-6 py-4">Lokasi</th>
+                                <th class="px-6 py-4">Stok</th>
+                                <th class="px-6 py-4">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-database-body" class="divide-y text-sm"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Tab: Import Export -->
+            <section id="tab-import-export" class="tab-content hidden space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Export -->
+                    <div class="bg-white p-8 rounded-2xl border shadow-sm space-y-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><i class="fas fa-download"></i></div>
+                            <h3 class="text-xl font-bold">Export Data</h3>
+                        </div>
+                        <p class="text-sm text-slate-500">Unduh seluruh database aset untuk keperluan backup atau laporan eksternal.</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <button onclick="exportToExcel()" class="p-4 border rounded-xl hover:bg-green-50 transition-all text-center">
+                                <i class="fas fa-file-excel text-green-600 text-2xl mb-2"></i>
+                                <p class="text-xs font-bold uppercase">Excel (.xlsx)</p>
+                            </button>
+                            <button onclick="exportToPDF()" class="p-4 border rounded-xl hover:bg-red-50 transition-all text-center">
+                                <i class="fas fa-file-pdf text-red-600 text-2xl mb-2"></i>
+                                <p class="text-xs font-bold uppercase">PDF Report</p>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Import -->
+                    <div class="bg-white p-8 rounded-2xl border shadow-sm space-y-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center"><i class="fas fa-upload"></i></div>
+                            <h3 class="text-xl font-bold">Import Data Massal</h3>
+                        </div>
+                        <label class="block border-2 border-dashed border-slate-200 p-8 rounded-xl text-center cursor-pointer hover:border-orange-400">
+                            <input type="file" id="import-excel" accept=".xlsx, .xls" class="hidden">
+                            <i class="fas fa-file-import text-3xl text-slate-300 mb-2"></i>
+                            <p class="text-sm font-medium text-slate-600">Klik untuk upload file Excel</p>
+                            <p class="text-[10px] text-slate-400 mt-2">Format: Nama Barang | Merk | Lokasi | Jumlah</p>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Pencarian & Scan -->
+            <section id="tab-pencarian" class="tab-content hidden space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+                        <h3 class="font-bold text-lg"><i class="fas fa-qrcode mr-2"></i>Scan QR Code Aset</h3>
+                        <div id="reader" class="rounded-xl overflow-hidden border bg-slate-50"></div>
+                        <div id="scan-result" class="p-4 bg-blue-50 text-blue-700 rounded-lg text-sm hidden"></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+                        <h3 class="font-bold text-lg"><i class="fas fa-search mr-2"></i>Cari Manual</h3>
+                        <input type="text" id="manual-search" placeholder="Ketik nama atau SN barang..." class="w-full px-4 py-3 border rounded-xl">
+                        <div id="search-results-list" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Mutasi -->
+            <section id="tab-input-mutasi" class="tab-content hidden space-y-6">
+                <div class="bg-white p-8 rounded-2xl border shadow-sm max-w-2xl mx-auto space-y-6">
+                    <h2 class="text-2xl font-bold text-slate-800">Proses Mutasi Barang</h2>
+                    <form id="form-mutasi" class="space-y-4">
+                        <div class="space-y-1">
+                            <label class="text-sm font-bold text-slate-600">Pilih Barang</label>
+                            <select name="asset_id" id="mutasi-asset-select" required class="w-full px-4 py-2.5 border rounded-lg"></select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-sm font-bold text-slate-600">Jenis</label>
+                                <select name="jenis_mutasi" class="w-full px-4 py-2.5 border rounded-lg">
+                                    <option value="Perpindahan">Perpindahan</option>
+                                    <option value="Perbaikan">Perbaikan</option>
+                                    <option value="Rusak Total">Rusak Total</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-sm font-bold text-slate-600">Tujuan</label>
+                                <select name="lokasi_tujuan" required class="select-ruangan w-full px-4 py-2.5 border rounded-lg"></select>
+                            </div>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-sm font-bold text-slate-600">Keterangan / Alasan</label>
+                            <textarea name="keterangan" class="w-full px-4 py-2 border rounded-lg h-20"></textarea>
+                        </div>
+                        <button type="submit" class="w-full py-3 bg-orange-500 text-white font-bold rounded-xl">Simpan Mutasi</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Tab: Database Mutasi -->
+            <section id="tab-database-mutasi" class="tab-content hidden space-y-6">
+                <div class="bg-white rounded-xl border shadow-sm overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b">
+                            <tr>
+                                <th class="px-6 py-4">Waktu</th>
+                                <th class="px-6 py-4">Barang</th>
+                                <th class="px-6 py-4">Jenis</th>
+                                <th class="px-6 py-4">Ke Lokasi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-mutasi-body" class="divide-y text-sm"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Tab: Master Ruangan -->
+            <section id="tab-master-ruangan" class="tab-content hidden">
+                <div class="bg-white p-6 rounded-xl border max-w-xl mx-auto space-y-4">
+                    <h3 class="font-bold">Daftar Ruangan Master</h3>
+                    <form id="form-master-ruangan" class="flex gap-2">
+                        <input type="text" name="nama_ruangan" required placeholder="Nama Ruangan Baru" class="flex-1 px-4 py-2 border rounded-lg">
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Tambah</button>
+                    </form>
+                    <div id="room-list" class="space-y-2"></div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-8 right-8 z-[100] hidden bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl animate-bounce"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
   apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
   authDomain: "inventarisalkes-f3992.firebaseapp.com",
   projectId: "inventarisalkes-f3992",
@@ -26,666 +319,257 @@ const firebaseConfig = {
   messagingSenderId: "83234246153",
   appId: "1:83234246153:web:0acdd739523b409643f2d8"
 };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'hospital-asset-pro';
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'hospital-asset-v1';
 
-const App = () => {
-  const [user, setUser] = useState(null);
-  const [activeMenu, setActiveMenu] = useState('dashboard');
-  const [assets, setAssets] = useState([]);
-  const [rooms, setRooms] = useState([]);
-  const [mutations, setMutations] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [notification, setNotification] = useState(null);
+        let state = { assets: [], rooms: [], mutations: [], user: null };
+        let html5QrCode = null;
 
-  // Auth Initialization (Handling Custom Token Mismatch)
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          try {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } catch (tokenErr) {
-            console.error("Token mismatch/error, falling back to anonymous:", tokenErr);
-            await signInAnonymously(auth);
-          }
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Critical Auth error:", err);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (!u) setIsLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+        // TAB NAVIGATION
+        window.switchTab = (tabId) => {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`)?.classList.remove('hidden');
+            document.getElementById(`btn-${tabId}`)?.classList.add('active');
 
-  // Real-time Data Listeners
-  useEffect(() => {
-    if (!user) return;
+            // QR Scanner control
+            if(tabId === 'pencarian') startScanner();
+            else stopScanner();
+        };
 
-    const assetsQuery = collection(db, 'artifacts', appId, 'public', 'data', 'assets');
-    const roomsQuery = collection(db, 'artifacts', appId, 'public', 'data', 'rooms');
-    const mutationsQuery = collection(db, 'artifacts', appId, 'public', 'data', 'mutations');
+        const showToast = (msg) => {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 3000);
+        };
 
-    const unsubAssets = onSnapshot(assetsQuery, (snapshot) => {
-      setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setIsLoading(false);
-    }, (err) => console.error("Assets fetch error:", err));
-
-    const unsubRooms = onSnapshot(roomsQuery, (snapshot) => {
-      setRooms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => console.error("Rooms fetch error:", err));
-
-    const unsubMutations = onSnapshot(mutationsQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Sort mutations by timestamp in memory
-      setMutations(data.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)));
-    }, (err) => console.error("Mutations fetch error:", err));
-
-    return () => {
-      unsubAssets();
-      unsubRooms();
-      unsubMutations();
-    };
-  }, [user]);
-
-  const showNotify = (msg, type = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  // --- UI HELPERS ---
-
-  const Sidebar = () => {
-    const menus = [
-      { id: 'dashboard', icon: <LayoutDashboard size={20}/>, label: 'Dashboard' },
-      { id: 'input', icon: <PlusCircle size={20}/>, label: 'Input Aset' },
-      { id: 'database', icon: <Database size={20}/>, label: 'Database Aset' },
-      { id: 'rooms', icon: <MapPin size={20}/>, label: 'Manajemen Ruangan' },
-      { id: 'mutation', icon: <MoveHorizontal size={20}/>, label: 'Mutasi Barang' },
-      { id: 'mutation_db', icon: <FileText size={20}/>, label: 'History Mutasi' },
-      { id: 'master_room', icon: <Settings size={20}/>, label: 'Master Ruangan' },
-      { id: 'import_export', icon: <Download size={20}/>, label: 'Import/Export' },
-    ];
-
-    return (
-      <div className="w-64 bg-slate-900 h-screen sticky top-0 flex flex-col text-slate-300 shrink-0">
-        <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">H</div>
-            SIMARS PRO
-          </h1>
-        </div>
-        <nav className="flex-1 overflow-y-auto py-4">
-          {menus.map(menu => (
-            <button
-              key={menu.id}
-              onClick={() => setActiveMenu(menu.id)}
-              className={`w-full flex items-center gap-3 px-6 py-3 transition-colors hover:bg-slate-800 ${activeMenu === menu.id ? 'bg-blue-600 text-white border-r-4 border-blue-400' : ''}`}
-            >
-              {menu.icon}
-              <span className="text-sm font-medium">{menu.label}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-    );
-  };
-
-  const Header = () => (
-    <div className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 sticky top-0 z-10">
-      <div className="flex items-center gap-4 flex-1 overflow-hidden">
-        <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded text-xs font-semibold whitespace-nowrap">
-          STATUS: ONLINE
-        </div>
-        <div className="text-sm text-slate-500 font-medium truncate">Sistem Manajemen Aset Terintegrasi v2.1</div>
-      </div>
-      <div className="flex items-center gap-4 pl-4 border-l ml-4 border-slate-200">
-        <span className="text-xs font-medium text-slate-400 hidden md:inline">UID: {user?.uid}</span>
-        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200">
-          {user?.uid?.charAt(0).toUpperCase() || '?'}
-        </div>
-      </div>
-    </div>
-  );
-
-  // --- PAGES ---
-
-  const DashboardPage = () => {
-    const totalQty = assets.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
-    const stats = [
-      { label: 'Total Unit Aset', value: totalQty, icon: <Package className="text-blue-600"/>, bg: 'bg-blue-50' },
-      { label: 'Jenis Barang', value: assets.length, icon: <Database className="text-purple-600"/>, bg: 'bg-purple-50' },
-      { label: 'Total Ruangan', value: rooms.length, icon: <MapPin className="text-orange-600"/>, bg: 'bg-orange-50' },
-      { label: 'Total Mutasi', value: mutations.length, icon: <MoveHorizontal className="text-green-600"/>, bg: 'bg-green-50' },
-    ];
-
-    return (
-      <div className="p-8">
-        <h2 className="text-2xl font-bold mb-8">Ringkasan Statistik</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          {stats.map((s, i) => (
-            <div key={i} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-              <div className={`w-12 h-12 ${s.bg} rounded-xl flex items-center justify-center shrink-0`}>{s.icon}</div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">{s.label}</p>
-                <p className="text-2xl font-bold text-slate-800">{s.value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
-              <MoveHorizontal size={18} className="text-blue-600"/> Mutasi Terakhir
-            </h3>
-            <div className="space-y-3">
-              {mutations.length > 0 ? mutations.slice(0, 5).map((m, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors">
-                  <div>
-                    <p className="text-sm font-bold text-slate-700">{m.assetName}</p>
-                    <p className="text-xs text-slate-500 font-medium">{m.fromRoom} <ArrowRightLeft size={10} className="inline mx-1"/> {m.toRoom}</p>
-                  </div>
-                  <p className="text-xs text-slate-400 font-bold bg-white px-2 py-1 rounded shadow-sm border">{m.date}</p>
-                </div>
-              )) : <p className="text-sm text-slate-400 italic py-4">Belum ada riwayat mutasi.</p>}
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
-              <AlertTriangle size={18} className="text-orange-500"/> Stok Kritis (≤ 5)
-            </h3>
-            <div className="space-y-3">
-              {assets.filter(a => Number(a.quantity) <= 5).length > 0 ? (
-                assets.filter(a => Number(a.quantity) <= 5).slice(0, 5).map((a, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-orange-50/50 rounded-xl border border-orange-100">
-                    <p className="text-sm font-semibold text-slate-700">{a.name}</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500 font-medium">{a.location}</span>
-                      <p className="text-sm font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-100">{a.quantity} Unit</p>
-                    </div>
-                  </div>
-                ))
-              ) : <p className="text-sm text-slate-400 italic py-4 text-center">Stok semua aset aman.</p>}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const MasterRoomPage = () => {
-    const [name, setName] = useState('');
-    const [editingId, setEditingId] = useState(null);
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      if (!name.trim()) return;
-      try {
-        if (editingId) {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', editingId), { name });
-          showNotify("Ruangan berhasil diperbarui");
-        } else {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { name });
-          showNotify("Ruangan baru ditambahkan");
-        }
-        setName('');
-        setEditingId(null);
-      } catch (err) { showNotify("Terjadi kesalahan", "error"); }
-    };
-
-    return (
-      <div className="p-8 max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">Master Ruangan</h2>
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl border shadow-sm mb-8 flex gap-3">
-          <input 
-            type="text" value={name} onChange={e => setName(e.target.value)}
-            className="flex-1 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" 
-            placeholder="Masukkan nama ruangan (contoh: Lab 1, Poli Gigi)..." required
-          />
-          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-colors shadow-lg shadow-blue-200">
-            {editingId ? 'Update' : 'Tambah'}
-          </button>
-        </form>
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-          <div className="divide-y divide-slate-100">
-            {rooms.length > 0 ? rooms.map(room => (
-              <div key={room.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
-                <span className="font-bold text-slate-700">{room.name}</span>
-                <div className="flex gap-1">
-                  <button onClick={() => { setName(room.name); setEditingId(room.id); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 size={18}/></button>
-                  <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', room.id))} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18}/></button>
-                </div>
-              </div>
-            )) : <p className="p-8 text-center text-slate-400 italic">Belum ada data ruangan.</p>}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const InputAssetPage = ({ editData = null, onCancel = null }) => {
-    const [form, setForm] = useState({
-      date: new Date().toISOString().split('T')[0],
-      name: '', brand: '', serial: '', quantity: 1, price: '', vendor: '', location: ''
-    });
-
-    useEffect(() => { 
-      if (editData) setForm({
-        ...editData,
-        date: editData.date || new Date().toISOString().split('T')[0]
-      }); 
-    }, [editData]);
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      try {
-        if (editData) {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', editData.id), form);
-          showNotify("Data aset berhasil diperbarui");
-          if (onCancel) onCancel();
-        } else {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), form);
-          showNotify("Aset baru berhasil dicatat");
-          setForm({ date: new Date().toISOString().split('T')[0], name: '', brand: '', serial: '', quantity: 1, price: '', vendor: '', location: '' });
-        }
-      } catch (err) { showNotify("Gagal menyimpan data", "error"); }
-    };
-
-    return (
-      <div className="p-8 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-bold text-slate-800">{editData ? 'Edit Detail Aset' : 'Registrasi Aset Baru'}</h2>
-          {editData && (
-            <button onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
-          )}
-        </div>
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-bold text-slate-700 mb-2">Nama Barang</label>
-            <input 
-              type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} 
-              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 focus:bg-white transition-all bg-slate-50/50" 
-              placeholder="Contoh: USG Mindray DC-30" required 
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Lokasi / Ruangan</label>
-            <select 
-              value={form.location} onChange={e => setForm({...form, location: e.target.value})} 
-              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" required
-            >
-              <option value="">-- Pilih Lokasi --</option>
-              {rooms.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Stok / Kuantitas</label>
-            <input 
-              type="number" value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} 
-              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
-              placeholder="0" required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Serial Number / Kode</label>
-            <input 
-              type="text" value={form.serial} onChange={e => setForm({...form, serial: e.target.value})} 
-              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
-              placeholder="SN-XXXX-XXXX"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Merk / Model</label>
-            <input 
-              type="text" value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} 
-              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Vendor / Distributor</label>
-            <input 
-              type="text" value={form.vendor} onChange={e => setForm({...form, vendor: e.target.value})} 
-              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Tanggal Pengadaan</label>
-            <input 
-              type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} 
-              className="w-full border-2 border-slate-100 rounded-xl p-3 outline-none focus:border-blue-500 bg-slate-50/50" 
-            />
-          </div>
-          <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t border-slate-100 mt-2">
-            {editData && (
-              <button type="button" onClick={onCancel} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Batal</button>
-            )}
-            <button type="submit" className="bg-blue-600 text-white px-10 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2">
-              <CheckCircle size={20}/> {editData ? 'Simpan Perubahan' : 'Daftarkan Aset'}
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  };
-
-  const DatabaseAssetPage = () => {
-    const [editingAsset, setEditingAsset] = useState(null);
-    const [search, setSearch] = useState('');
-
-    if (editingAsset) return <InputAssetPage editData={editingAsset} onCancel={() => setEditingAsset(null)} />;
-
-    const filteredAssets = assets.filter(a => 
-      a.name.toLowerCase().includes(search.toLowerCase()) || 
-      a.location.toLowerCase().includes(search.toLowerCase()) ||
-      (a.serial && a.serial.toLowerCase().includes(search.toLowerCase()))
-    );
-    
-    return (
-      <div className="p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <h2 className="text-2xl font-bold text-slate-800">Database Inventaris</h2>
-          <div className="relative w-full md:w-96">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-            <input 
-              type="text" 
-              placeholder="Cari nama aset, SN, atau ruangan..." 
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-100">
-                  <th className="px-8 py-5">Identitas Aset</th>
-                  <th className="px-6 py-5">Lokasi</th>
-                  <th className="px-6 py-5">Info Teknis</th>
-                  <th className="px-6 py-5 text-center">Stok</th>
-                  <th className="px-8 py-5 text-right">Manajemen</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filteredAssets.length > 0 ? filteredAssets.map(a => (
-                  <tr key={a.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="px-8 py-5">
-                      <p className="font-bold text-slate-800 text-base">{a.name}</p>
-                      <p className="text-xs text-slate-400 font-medium">Vendor: {a.vendor || 'N/A'}</p>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <MapPin size={14} className="text-blue-500"/>
-                        <span className="font-semibold text-sm">{a.location}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <p className="text-xs font-bold text-slate-400 uppercase">SN: <span className="text-slate-700">{a.serial || '-'}</span></p>
-                      <p className="text-xs font-bold text-slate-400 uppercase">Merk: <span className="text-slate-700">{a.brand || '-'}</span></p>
-                    </td>
-                    <td className="px-6 py-5 text-center">
-                      <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${Number(a.quantity) <= 5 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
-                        {a.quantity} Unit
-                      </span>
-                    </td>
-                    <td className="px-8 py-5 text-right space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditingAsset(a)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-all">
-                        <Edit3 size={18}/>
-                      </button>
-                      <button onClick={() => {
-                        if(confirm(`Hapus data ${a.name}?`)) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', a.id));
-                      }} className="p-2 text-slate-400 hover:text-red-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-red-100 transition-all">
-                        <Trash2 size={18}/>
-                      </button>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan="5" className="px-8 py-12 text-center text-slate-400 italic">
-                      Tidak ada data aset yang ditemukan.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const MutationPage = () => {
-    const [selectedAsset, setSelectedAsset] = useState(null);
-    const [targetRoom, setTargetRoom] = useState('');
-    const [note, setNote] = useState('');
-
-    const handleMutate = async (e) => {
-      e.preventDefault();
-      if (!selectedAsset || !targetRoom) return showNotify("Harap lengkapi data mutasi", "error");
-      if (selectedAsset.location === targetRoom) return showNotify("Ruangan tujuan tidak boleh sama dengan saat ini", "error");
-
-      try {
-        await runTransaction(db, async (transaction) => {
-          const assetRef = doc(db, 'artifacts', appId, 'public', 'data', 'assets', selectedAsset.id);
-          const mutationRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'));
-          
-          transaction.update(assetRef, { location: targetRoom });
-          transaction.set(mutationRef, {
-            assetId: selectedAsset.id,
-            assetName: selectedAsset.name,
-            fromRoom: selectedAsset.location,
-            toRoom: targetRoom,
-            note: note,
-            date: new Date().toLocaleDateString('id-ID'),
-            timestamp: new Date().toISOString()
-          });
+        // FIREBASE AUTH
+        onAuthStateChanged(auth, (u) => {
+            state.user = u;
+            if (u) {
+                document.getElementById('auth-status').innerHTML = `<div class="w-2 h-2 rounded-full bg-green-500"></div> Cloud Active`;
+                initData();
+            } else {
+                signInAnonymously(auth);
+            }
         });
 
-        showNotify("Mutasi aset berhasil dicatat");
-        setSelectedAsset(null);
-        setTargetRoom('');
-        setNote('');
-      } catch (err) {
-        showNotify("Gagal melakukan mutasi", "error");
-      }
-    };
+        function initData() {
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), (snap) => {
+                state.rooms = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                updateRoomUI();
+            });
 
-    return (
-      <div className="p-8 max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold mb-8 text-slate-800">Catat Mutasi / Perpindahan Aset</h2>
-        <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-200">
-          <form onSubmit={handleMutate} className="space-y-8">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-3">Pilih Aset Yang Akan Dipindahkan</label>
-              <select 
-                onChange={(e) => setSelectedAsset(assets.find(a => a.id === e.target.value))}
-                className="w-full border-2 border-slate-100 bg-slate-50/50 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:bg-white transition-all text-slate-800 font-medium"
-              >
-                <option value="">-- Cari Nama Aset --</option>
-                {assets.map(a => (
-                  <option key={a.id} value={a.id}>{a.name} (SN: {a.serial || '-'}) - @{a.location}</option>
-                ))}
-              </select>
-            </div>
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), (snap) => {
+                state.assets = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                updateAssetUI();
+            });
 
-            {selectedAsset && (
-              <div className="p-6 bg-blue-50 rounded-3xl border-2 border-blue-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in zoom-in-95 duration-300">
-                <div className="text-center md:text-left">
-                  <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Lokasi Sekarang</p>
-                  <p className="font-black text-2xl text-blue-800">{selectedAsset.location}</p>
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), (snap) => {
+                state.mutations = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                document.getElementById('stat-total-mutasi').innerText = state.mutations.length;
+                renderMutations();
+            });
+        }
+
+        function updateRoomUI() {
+            const options = `<option value="">Pilih Ruangan</option>` + state.rooms.map(r => `<option value="${r.nama_ruangan}">${r.nama_ruangan}</option>`).join('');
+            document.querySelectorAll('.select-ruangan').forEach(s => s.innerHTML = options);
+            
+            document.getElementById('room-list').innerHTML = state.rooms.map(r => `
+                <div class="flex justify-between items-center p-3 bg-slate-50 rounded-lg group">
+                    <span class="text-sm font-medium">${r.nama_ruangan}</span>
+                    <button onclick="deleteRoom('${r.id}')" class="text-slate-300 group-hover:text-red-500"><i class="fas fa-trash"></i></button>
                 </div>
-                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 animate-bounce md:animate-none">
-                  <ArrowRightLeft size={24} />
-                </div>
-                <div className="text-center md:text-right w-full md:w-auto">
-                  <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 text-center md:text-right">Ruangan Tujuan</p>
-                  <select 
-                    value={targetRoom}
-                    onChange={(e) => setTargetRoom(e.target.value)}
-                    className="w-full md:w-auto border-none bg-transparent font-black text-2xl text-blue-800 focus:ring-0 p-0 text-center md:text-right cursor-pointer"
-                  >
-                    <option value="">Pilih Tujuan</option>
-                    {rooms.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
+            `).join('');
+            document.getElementById('stat-total-ruangan').innerText = state.rooms.length;
+        }
 
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-3">Keterangan / Alasan Mutasi</label>
-              <textarea 
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                className="w-full border-2 border-slate-100 bg-slate-50/50 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:bg-white transition-all h-32"
-                placeholder="Tuliskan alasan pemindahan barang (contoh: Maintenance berkala, Kebutuhan darurat IGD, dll)..."
-              />
-            </div>
-
-            <button type="submit" className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl shadow-slate-200 hover:bg-blue-600 transition-all flex items-center justify-center gap-3 group uppercase tracking-wider">
-              Konfirmasi Perpindahan <MoveHorizontal className="group-hover:translate-x-2 transition-transform" />
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  };
-
-  const MutationHistoryPage = () => (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-6 text-slate-800">Log Riwayat Mutasi Barang</h2>
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100 text-[10px] uppercase font-black tracking-widest text-slate-400">
-                <th className="px-8 py-5">Tanggal</th>
-                <th className="px-6 py-5">Aset Terkait</th>
-                <th className="px-6 py-5">Log Alur</th>
-                <th className="px-8 py-5">Keterangan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {mutations.length > 0 ? mutations.map((m, i) => (
-                <tr key={i} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-8 py-5">
-                    <span className="font-bold text-slate-500 text-xs">{m.date}</span>
-                  </td>
-                  <td className="px-6 py-5">
-                    <p className="font-black text-slate-800">{m.assetName}</p>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black">{m.fromRoom}</span>
-                      <ChevronRight size={14} className="text-slate-300" />
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black">{m.toRoom}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-5">
-                    <p className="text-sm text-slate-500 italic">"{m.note || '-'}"</p>
-                  </td>
-                </tr>
-              )) : (
+        function updateAssetUI() {
+            const tbody = document.getElementById('table-database-body');
+            tbody.innerHTML = state.assets.map(a => `
                 <tr>
-                  <td colSpan="4" className="px-8 py-12 text-center text-slate-400 italic">Belum ada riwayat mutasi tercatat.</td>
+                    <td class="px-6 py-3"><img src="${a.foto || 'https://via.placeholder.com/40'}" class="w-10 h-10 object-cover rounded shadow-sm"></td>
+                    <td class="px-6 py-3">
+                        <div class="font-bold text-slate-800">${a.nama_barang}</div>
+                        <div class="text-[10px] text-slate-400 uppercase">${a.merk}</div>
+                    </td>
+                    <td class="px-6 py-3"><span class="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs font-semibold">${a.lokasi}</span></td>
+                    <td class="px-6 py-3 font-bold text-slate-600">${a.jumlah}</td>
+                    <td class="px-6 py-3">
+                        <button onclick="deleteAsset('${a.id}')" class="text-slate-300 hover:text-red-500 transition-colors"><i class="fas fa-trash"></i></button>
+                    </td>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
+            `).join('');
 
-  const ImportExportPage = () => {
-    const exportCSV = () => {
-      const headers = ['Nama', 'Merk', 'SN', 'Lokasi', 'Stok', 'Vendor', 'Tanggal Pengadaan'];
-      const rows = assets.map(a => [a.name, a.brand, a.serial, a.location, a.quantity, a.vendor, a.date]);
-      let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(r => r.join(",")).join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `SIMARS_Inventaris_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showNotify("Export CSV berhasil");
-    };
+            document.getElementById('mutasi-asset-select').innerHTML = `<option value="">Pilih Barang...</option>` + 
+                state.assets.map(a => `<option value="${a.id}">${a.nama_barang} (Merk: ${a.merk})</option>`).join('');
 
-    return (
-      <div className="p-8 max-w-4xl mx-auto text-center">
-        <h2 className="text-2xl font-bold mb-12 text-slate-800">Manajemen Data Eksternal</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-white p-12 rounded-3xl shadow-xl border border-slate-200 group hover:border-blue-400 transition-all">
-            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-              <Upload size={40} />
-            </div>
-            <h3 className="font-black text-xl mb-3 text-slate-800 uppercase tracking-tight">Import CSV</h3>
-            <p className="text-sm text-slate-500 mb-8 leading-relaxed">Update massal inventaris Anda dengan mengunggah file spreadsheet berformat CSV.</p>
-            <button className="bg-slate-100 px-8 py-3 rounded-2xl text-sm font-black text-slate-400 cursor-not-allowed uppercase tracking-wider">Coming Soon</button>
-          </div>
-          <div className="bg-white p-12 rounded-3xl shadow-xl border border-slate-200 group hover:border-green-400 transition-all">
-            <div className="w-20 h-20 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-              <Download size={40} />
-            </div>
-            <h3 className="font-black text-xl mb-3 text-slate-800 uppercase tracking-tight">Export Database</h3>
-            <p className="text-sm text-slate-500 mb-8 leading-relaxed">Unduh salinan lengkap database aset rumah sakit Anda ke dalam format CSV.</p>
-            <button onClick={exportCSV} className="bg-green-600 hover:bg-green-700 px-8 py-3 rounded-2xl text-sm font-black text-white shadow-lg shadow-green-100 transition-all uppercase tracking-wider">Download CSV</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+            document.getElementById('stat-total-aset').innerText = state.assets.reduce((s, a) => s + (parseInt(a.jumlah) || 0), 0);
+            document.getElementById('stat-alat-medis').innerText = state.assets.length;
+        }
 
-  const renderContent = () => {
-    if (isLoading) return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-slate-400 font-bold animate-pulse uppercase tracking-widest text-xs">Menghubungkan ke Cloud...</p>
-      </div>
-    );
+        function renderMutations() {
+            document.getElementById('table-mutasi-body').innerHTML = state.mutations.sort((a,b) => b.createdAt - a.createdAt).map(m => `
+                <tr>
+                    <td class="px-6 py-3 text-xs text-slate-500">${m.createdAt?.toDate().toLocaleString('id-ID')}</td>
+                    <td class="px-6 py-3 font-medium">${m.nama_barang}</td>
+                    <td class="px-6 py-3"><span class="px-2 py-1 rounded text-[10px] bg-orange-100 text-orange-600 uppercase font-bold">${m.jenis}</span></td>
+                    <td class="px-6 py-3 font-semibold">${m.tujuan}</td>
+                </tr>
+            `).join('');
+        }
 
-    switch(activeMenu) {
-      case 'dashboard': return <DashboardPage />;
-      case 'input': return <InputAssetPage />;
-      case 'database': return <DatabaseAssetPage />;
-      case 'mutation': return <MutationPage />;
-      case 'mutation_db': return <MutationHistoryPage />;
-      case 'master_room': return <MasterRoomPage />;
-      case 'import_export': return <ImportExportPage />;
-      default: return <DashboardPage />;
-    }
-  };
+        // ACTIONS
+        window.deleteRoom = async (id) => { if(confirm('Hapus ruangan?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', id)); };
+        window.deleteAsset = async (id) => { if(confirm('Hapus aset?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', id)); };
 
-  return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-        <main className="flex-1 overflow-y-auto bg-slate-50/50">
-          {renderContent()}
-        </main>
-      </div>
+        // FORM SUBMIT: INPUT ASET
+        document.getElementById('form-input-aset').onsubmit = async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const data = Object.fromEntries(fd.entries());
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), {
+                ...data,
+                jumlah: parseInt(data.jumlah),
+                foto: document.getElementById('foto-base64').value,
+                createdAt: Timestamp.now()
+            });
+            e.target.reset();
+            document.getElementById('photo-preview').classList.add('hidden');
+            document.getElementById('preview-placeholder').classList.remove('hidden');
+            showToast('Aset berhasil disimpan ke Cloud!');
+        };
 
-      {notification && (
-        <div className={`fixed bottom-8 right-8 px-8 py-5 rounded-3xl shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-500 z-50 border-2 ${notification.type === 'error' ? 'bg-red-600 text-white border-red-400' : 'bg-slate-900 text-white border-slate-700'}`}>
-          {notification.type === 'error' ? <AlertTriangle size={24}/> : <CheckCircle size={24} className="text-green-400"/>}
-          <span className="font-black uppercase tracking-tight">{notification.msg}</span>
-        </div>
-      )}
-    </div>
-  );
-};
+        // FORM SUBMIT: MUTASI
+        document.getElementById('form-mutasi').onsubmit = async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const d = Object.fromEntries(fd.entries());
+            const asset = state.assets.find(x => x.id === d.asset_id);
+            if(!asset) return;
 
-export default App;
+            // 1. Log Mutation
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), {
+                asset_id: d.asset_id,
+                nama_barang: asset.nama_barang,
+                jenis: d.jenis_mutasi,
+                tujuan: d.lokasi_tujuan,
+                keterangan: d.keterangan,
+                createdAt: Timestamp.now()
+            });
+
+            // 2. Update Asset Location
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', d.asset_id), {
+                lokasi: d.lokasi_tujuan
+            });
+
+            e.target.reset();
+            showToast('Mutasi Berhasil & Lokasi Diperbarui!');
+        };
+
+        // SCANNER & SEARCH
+        function startScanner() {
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+                const res = document.getElementById('scan-result');
+                res.innerText = `Terdeteksi: ${text}`;
+                res.classList.remove('hidden');
+                document.getElementById('manual-search').value = text;
+                performSearch(text);
+            }).catch(err => console.log(err));
+        }
+
+        function stopScanner() {
+            if(html5QrCode) {
+                html5QrCode.stop().then(() => html5QrCode.clear()).catch(e => console.log(e));
+            }
+        }
+
+        const performSearch = (q) => {
+            const list = document.getElementById('search-results-list');
+            const filtered = state.assets.filter(a => a.nama_barang.toLowerCase().includes(q.toLowerCase()) || a.merk.toLowerCase().includes(q.toLowerCase()));
+            list.innerHTML = filtered.map(a => `
+                <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <img src="${a.foto || 'https://via.placeholder.com/40'}" class="w-12 h-12 rounded object-cover">
+                    <div class="flex-1">
+                        <p class="font-bold text-sm">${a.nama_barang}</p>
+                        <p class="text-[10px] text-slate-500 uppercase">${a.merk} • ${a.lokasi}</p>
+                    </div>
+                </div>
+            `).join('');
+        };
+        document.getElementById('manual-search').oninput = (e) => performSearch(e.target.value);
+
+        // PHOTO HANDLER
+        document.getElementById('input-photo').onchange = (e) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                document.getElementById('photo-preview').src = ev.target.result;
+                document.getElementById('photo-preview').classList.remove('hidden');
+                document.getElementById('preview-placeholder').classList.add('hidden');
+                document.getElementById('foto-base64').value = ev.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        };
+
+        // EXPORT EXCEL
+        window.exportToExcel = () => {
+            const ws = XLSX.utils.json_to_sheet(state.assets.map(a => ({ Barang: a.nama_barang, Merk: a.merk, Lokasi: a.lokasi, Jumlah: a.jumlah })));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Assets");
+            XLSX.writeFile(wb, `HAMS_Export_${Date.now()}.xlsx`);
+            showToast('Excel diunduh!');
+        };
+
+        // EXPORT PDF
+        window.exportToPDF = () => {
+            const { jsPDF } = window.jspdf;
+            const docPdf = new jsPDF();
+            docPdf.text("DAFTAR ASET RUMAH SAKIT - HAMS PRO", 14, 15);
+            docPdf.autoTable({
+                head: [['Barang', 'Merk', 'Lokasi', 'Jumlah']],
+                body: state.assets.map(a => [a.nama_barang, a.merk, a.lokasi, a.jumlah]),
+                startY: 20
+            });
+            docPdf.save("Laporan_Aset.pdf");
+            showToast('PDF Terbuat!');
+        };
+
+        // IMPORT EXCEL
+        document.getElementById('import-excel').onchange = (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                const batch = writeBatch(db);
+                json.forEach(row => {
+                    const newDoc = doc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'));
+                    batch.set(newDoc, {
+                        nama_barang: row["Nama Barang"] || row["Barang"] || "Unknown",
+                        merk: row["Merk"] || row["Tipe"] || "-",
+                        lokasi: row["Lokasi"] || "Gudang Utama",
+                        jumlah: parseInt(row["Jumlah"]) || 1,
+                        createdAt: Timestamp.now()
+                    });
+                });
+                await batch.commit();
+                showToast(`Impor ${json.length} data sukses!`);
+            };
+            reader.readAsBinaryString(file);
+        };
+
+        document.getElementById('form-master-ruangan').onsubmit = async (e) => {
+            e.preventDefault();
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { nama_ruangan: e.target.nama_ruangan.value });
+            e.target.reset();
+        };
+
+        document.getElementById('current-date').innerText = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    </script>
+</body>
+</html>
