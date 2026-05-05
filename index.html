@@ -211,7 +211,7 @@
         };
 
         const seedInitialRooms = async () => {
-            const defaults = ["UGD", "ICU", "Radiologi", "Laboratorium", "Apotek", "Gudang Utama", "Ruang Rawat Inap"];
+            const defaults = ["IGD", "ICU", "Radiologi", "Laboratorium", "Fisioterapi", "Hemodialisa", "Kemoterapi"];
             for (let name of defaults) {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { name });
             }
