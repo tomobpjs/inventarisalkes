@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIMARS Pro - Manajemen Aset RS</title>
+    <title>Sistem Inventaris Alat Medis V.1.0 - Developed By:TOMOSJR2026</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -55,7 +55,7 @@
     <!-- Running Text Informasi -->
     <div class="running-text-container no-print">
         <div class="running-text">
-            Sistem Informasi Manajemen Aset Rumah Sakit (SIMARS) Pro v2.1 • Pastikan penginputan data sesuai dengan fisik barang • Fitur Sensus Aset dan Mutasi Bulanan kini tersedia dalam format PDF Standar Akreditasi • Gunakan menu Scan Barcode untuk pencarian cepat.
+            Selamat Datang di Sistem Inventaris Alkes V.1.0 • Pastikan penginputan data sesuai dengan fisik barang • Developed by:TOMOS JR2026 • Semoga Bahagia.
         </div>
     </div>
 
@@ -1085,9 +1085,9 @@
 
             // Kop
             doc.setFontSize(14); doc.setFont("helvetica", "bold");
-            doc.text("RSU SIMARS PRO INTERNASIONAL", 105, 15, {align:'center'});
+            doc.text("RSU DADI KELUARGA PURWOKERTO", 105, 15, {align:'center'});
             doc.setFontSize(8); doc.setFont("helvetica", "normal");
-            doc.text("Jl. Kesehatan No. 1 - Layanan Sensus Inventaris Digital", 105, 20, {align:'center'});
+            doc.text("Jl. Sultan Agung No:8A Teluk-Purwokerto Selatan", 105, 20, {align:'center'});
             doc.line(20, 22, 190, 22);
 
             doc.setFontSize(10); doc.text(`LAPORAN SENSUS ASET - ${room}`, 20, 30);
@@ -1102,8 +1102,8 @@
             });
 
             const finalY = doc.lastAutoTable.finalY + 15;
-            doc.text("Petugas Sensus,", 30, finalY);
-            doc.text("Kepala Bagian Inventaris,", 130, finalY);
+            doc.text("Pencatat Barang,", 30, finalY);
+            doc.text("Kepala Ruang/Koordinator,", 130, finalY);
             doc.text("________________", 30, finalY + 20);
             doc.text("________________", 130, finalY + 20);
 
