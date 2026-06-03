@@ -116,7 +116,7 @@
                     <i class="fas fa-hospital-alt text-sky-900 text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS ALAT MEDIS RSDK</h1>
+                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS NON MEDIS RSDK</h1>
                     <p class="text-xs text-sky-300">DEVELOPED BY:TOMOS JR2026</p>
                 </div>
             </div>
@@ -727,16 +727,21 @@
                 }
             };
 
-            // PERBAIKAN UTAMA: LOGIKA PROSES INISIALISASI & DETEKSI KAMERA FISIK PADA SMARTPHONE
             document.getElementById('btn-scan').onclick = async () => {
                 const reader = document.getElementById('reader');
                 
-                // 1. Inisialisasi scanner jika belum terdaftar secara global
+                // 1. Inisialisasi library scanner jika belum terdaftar secara global
                 if (!window.activeScanner) {
-                    window.activeScanner = new Html5Qrcode("reader");
+                    try {
+                        window.activeScanner = new Html5Qrcode("reader");
+                    } catch (initErr) {
+                        console.error("Gagal instansiasi Html5Qrcode:", initErr);
+                        showToast("Inisialisasi modul kamera gagal.", "error");
+                        return;
+                    }
                 }
 
-                // 2. Jika reader terlihat (kamera sedang aktif/mencoba aktif), lakukan stop
+                // 2. Jika reader terlihat (kamera sedang aktif/mencoba aktif), lakukan stop secara bersih
                 if (!reader.classList.contains('hidden')) {
                     scanBtnText.innerText = "Menonaktifkan Kamera...";
                     try {
@@ -747,6 +752,7 @@
                         console.warn("Info stop scanner:", err);
                     } finally {
                         window.activeScanner.clear();
+                        window.activeScanner = null; // paksa reset objek agar bersih
                         reader.classList.add('hidden');
                         scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
                     }
@@ -755,10 +761,18 @@
                     reader.classList.remove('hidden');
                     scanBtnText.innerText = "Menghubungkan Kamera...";
                     
-                    // Box bidik yang melandai secara horizontal, dioptimalkan khusus untuk membaca baris Barcode 1D & QR Code
+                    // Deteksi dini secure context (Wajib HTTPS untuk kamera smartphone)
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        showToast("Error: Kamera gagal diakses. Pastikan aplikasi dibuka lewat protokol HTTPS aman.", "error");
+                        reader.classList.add('hidden');
+                        scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                        return;
+                    }
+
+                    // Box bidik horizontal melandai untuk mendeteksi Barcode 1D & QR Code dengan nyaman di smartphone
                     const dynamicQrBox = (viewfinderWidth, viewfinderHeight) => {
                         const width = Math.floor(viewfinderWidth * 0.85);
-                        const height = Math.floor(viewfinderWidth * 0.45); 
+                        const height = Math.floor(viewfinderHeight * 0.45); 
                         return { width: width, height: height };
                     };
 
@@ -770,6 +784,7 @@
                             // Hentikan dan tutup kamera langsung setelah barcode terdeteksi
                             window.activeScanner.stop().then(() => {
                                 window.activeScanner.clear();
+                                window.activeScanner = null;
                                 reader.classList.add('hidden');
                                 scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
                             }).catch(err => console.error("Gagal stop setelah scan sukses:", err));
@@ -784,46 +799,50 @@
                         aspectRatio: 1.777778
                     };
 
-                    // PENDETEKSIAN INTEGRAL: Filter kamera belakang utama untuk meminimalkan bug layar hitam akibat pemilihan lensa dummy/sensor kedalaman
-                    Html5Qrcode.getCameras().then(async (devices) => {
-                        if (devices && devices.length > 0) {
-                            // Cari kamera belakang utama berdasarkan kata kunci label yang komprehensif
-                            let selectedCamera = devices.find(device => {
-                                const lbl = device.label.toLowerCase();
-                                return lbl.includes('back') || 
-                                       lbl.includes('rear') || 
-                                       lbl.includes('environment') || 
-                                       lbl.includes('belakang') || 
-                                       lbl.includes('main') || 
-                                       lbl.includes('0, facing back');
-                            });
-
-                            // Jika tidak ditemukan kamera spesifik dengan kata kunci tersebut, pilih kamera terakhir dari list (seringkali kamera utama belakang pada multi-camera HP)
-                            const cameraId = selectedCamera ? selectedCamera.id : devices[devices.length - 1].id;
-                            
-                            try {
-                                await window.activeScanner.start(cameraId, config, scanSuccessCallback);
-                                scanBtnText.innerText = "Matikan Kamera Scan";
-                            } catch (err) {
-                                console.warn("Gagal start menggunakan ID kamera khusus, mencoba metode standard...", err);
-                                fallbackFacingMode();
-                            }
-                        } else {
-                            fallbackFacingMode();
-                        }
-                    }).catch(err => {
-                        console.warn("Gagal mendapatkan list kamera, beralih ke metode standar...", err);
-                        fallbackFacingMode();
-                    });
-
-                    // Prosedur Fallback menggunakan face mode default lingkungan luar (kamera belakang)
-                    async function fallbackFacingMode() {
+                    // PROSEDUR UTAMA: Memanggil direct start facingMode "environment" terlebih dahulu
+                    // Ini langsung memaksa smartphone menampilkan dialog perizinan akses kamera di layar secara cepat
+                    try {
+                        await window.activeScanner.start(
+                            { facingMode: "environment" }, 
+                            config, 
+                            scanSuccessCallback,
+                            () => { /* Callback error frame biasa dibiarkan kosong agar tidak membebani log */ }
+                        );
+                        scanBtnText.innerText = "Matikan Kamera Scan";
+                    } catch (directErr) {
+                        console.warn("Metode direct start gagal, menjalankan prosedur fallback getCameras...", directErr);
+                        
+                        // PROSEDUR FALLBACK: Dijalankan jika smartphone membutuhkan ID kamera spesifik
                         try {
-                            await window.activeScanner.start({ facingMode: "environment" }, config, scanSuccessCallback);
-                            scanBtnText.innerText = "Matikan Kamera Scan";
-                        } catch (err) {
-                            console.error("Gagal memulai kamera dengan segala metode:", err);
-                            showToast("Izin akses kamera diblokir atau gagal dihubungkan", "error");
+                            const devices = await Html5Qrcode.getCameras();
+                            if (devices && devices.length > 0) {
+                                // Filter kamera belakang utama berdasarkan kata kunci label yang komprehensif
+                                let selectedCamera = devices.find(device => {
+                                    const lbl = device.label.toLowerCase();
+                                    return lbl.includes('back') || 
+                                           lbl.includes('rear') || 
+                                           lbl.includes('environment') || 
+                                           lbl.includes('belakang') || 
+                                           lbl.includes('main') || 
+                                           lbl.includes('0, facing back');
+                                });
+
+                                // Jika tidak ditemukan label spesifik, pilih kamera paling belakang (indeks terakhir)
+                                const cameraId = selectedCamera ? selectedCamera.id : devices[devices.length - 1].id;
+                                
+                                await window.activeScanner.start(
+                                    cameraId, 
+                                    config, 
+                                    scanSuccessCallback,
+                                    () => { /* Muted frame error */ }
+                                );
+                                scanBtnText.innerText = "Matikan Kamera Scan";
+                            } else {
+                                throw new Error("Tidak ada kamera terdeteksi di perangkat.");
+                            }
+                        } catch (fallbackErr) {
+                            console.error("Semua metode inisialisasi kamera gagal:", fallbackErr);
+                            showToast("Izin kamera ditolak atau kamera tidak ditemukan pada browser smartphone Anda.", "error");
                             reader.classList.add('hidden');
                             scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
                         }
