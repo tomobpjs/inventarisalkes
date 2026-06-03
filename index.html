@@ -621,6 +621,9 @@
         };
 
         const renderMutasi = (container) => {
+            // Set default date picker to today (format YYYY-MM-DD)
+            const today = new Date().toISOString().split('T')[0];
+
             container.innerHTML = `
                 <div class="max-w-xl mx-auto bg-white rounded-2xl shadow-sm border p-8">
                     <form id="mutasi-form" class="space-y-6">
@@ -653,6 +656,10 @@
                             <input type="number" id="mut-jumlah" required value="1" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
                         <div class="space-y-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase">Tanggal Mutasi *</label>
+                            <input type="date" id="mut-tanggal" required value="${today}" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="space-y-1">
                             <label class="text-xs font-bold text-slate-500 uppercase">Keterangan / Alasan</label>
                             <textarea id="mut-ket" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 h-24"></textarea>
                         </div>
@@ -668,8 +675,18 @@
                 const tujuan = document.getElementById('mut-tujuan').value;
                 const jumlah = Number(document.getElementById('mut-jumlah').value);
                 const jenis = document.getElementById('mut-jenis').value;
+                const inputTanggal = document.getElementById('mut-tanggal').value;
 
                 if (jumlah > asset.jumlah) return notify("Jumlah melebihi stok!", "error");
+
+                // Format input date (YYYY-MM-DD) to Indonesian formatted date string (DD/MM/YYYY or standard Localized format)
+                let formattedTanggal = new Date().toLocaleDateString('id-ID');
+                if (inputTanggal) {
+                    const dateParts = inputTanggal.split('-');
+                    if (dateParts.length === 3) {
+                        formattedTanggal = `${Number(dateParts[2])}/${Number(dateParts[1])}/${dateParts[0]}`;
+                    }
+                }
 
                 try {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', assetId), {
@@ -686,7 +703,7 @@
                         jumlah,
                         jenis,
                         keterangan: document.getElementById('mut-ket').value,
-                        tanggal: new Date().toLocaleDateString('id-ID'),
+                        tanggal: formattedTanggal,
                         createdAt: Timestamp.now()
                     });
 
