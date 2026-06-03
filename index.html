@@ -116,7 +116,7 @@
                     <i class="fas fa-hospital-alt text-sky-900 text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS ALAT MEDIS RSDK</h1>
+                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS NON MEDIS RSDK</h1>
                     <p class="text-xs text-sky-300">DEVELOPED BY:TOMOS JR2026</p>
                 </div>
             </div>
@@ -228,13 +228,13 @@
         import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
-  apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
-  authDomain: "inventarisalkes-f3992.firebaseapp.com",
-  projectId: "inventarisalkes-f3992",
-  storageBucket: "inventarisalkes-f3992.firebasestorage.app",
-  messagingSenderId: "83234246153",
-  appId: "1:83234246153:web:0acdd739523b409643f2d8"
-};
+          apiKey: "AIzaSyAzlAn3taV7-WMDta-AQAewzDUaZzxvxAc",
+          authDomain: "inventarisnonalkes.firebaseapp.com",
+          projectId: "inventarisnonalkes",
+          storageBucket: "inventarisnonalkes.firebasestorage.app",
+          messagingSenderId: "212207980203",
+          appId: "1:212207980203:web:582396a405766aa21ab1ee"
+        };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -691,8 +691,8 @@
                             <button id="btn-scan" class="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-sky-200 hover:shadow-sky-300 transition-all duration-300 active:scale-[0.99]">
                                 <i class="fas fa-camera"></i> <span id="scan-btn-text">Aktifkan Kamera Scan Barcode</span>
                             </button>
-                            <!-- Kontainer kamera dengan aspect-ratio pas dan frame hitam modern -->
-                            <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-md mx-auto shadow-inner aspect-video"></div>
+                            <!-- Kontainer kamera dengan min-height solid agar inisialisasi layout video berjalan lancar -->
+                            <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-md mx-auto shadow-inner" style="min-height: 250px;"></div>
                         </div>
                     </div>
 
@@ -720,18 +720,19 @@
                 }
             };
 
-            // OPTIMASI PENUH SCANNER BARCODE UNTUK HANDPHONE (Horizontal Viewfinder & Release Kamera)
+            // OPTIMASI SELEKSI KAMERA HP (GUNA MENGHINDARI LAYAR HITAM)
             document.getElementById('btn-scan').onclick = async () => {
                 const reader = document.getElementById('reader');
-                reader.classList.toggle('hidden');
                 
                 // Inisialisasi library scanner jika belum ada secara global
                 if (!window.activeScanner) {
                     window.activeScanner = new Html5Qrcode("reader");
                 }
 
-                if (reader.classList.contains('hidden')) {
+                if (!reader.classList.contains('hidden')) {
+                    // Jika saat ini kamera menyala, matikan dan sembunyikan container
                     scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                    reader.classList.add('hidden');
                     if (window.activeScanner.isScanning) {
                         try {
                             await window.activeScanner.stop();
@@ -740,48 +741,76 @@
                         }
                     }
                 } else {
-                    scanBtnText.innerText = "Matikan Kamera Scan";
+                    // Tampilkan container terlebih dahulu, lalu cari kamera fisik HP
+                    reader.classList.remove('hidden');
+                    scanBtnText.innerText = "Menghubungkan Kamera...";
                     
-                    // FUNGSI DINAMIS QRBOX: Didesain melandai horizontal khusus untuk mempermudah bidikan BARCODE batang pada layar HP
                     const dynamicQrBox = (viewfinderWidth, viewfinderHeight) => {
                         const width = Math.floor(viewfinderWidth * 0.85);
-                        const height = Math.floor(viewfinderWidth * 0.35); // Horizontal rectangle
+                        const height = Math.floor(viewfinderWidth * 0.35); // Horizontal melandai agar presisi menangkap Barcode
                         return { width: width, height: height };
                     };
 
-                    try {
-                        // Membuka kamera belakang (facingMode: environment) secara default
-                        await window.activeScanner.start(
-                            { facingMode: "environment" },
-                            { 
-                                fps: 15,              // Frame-rate optimal untuk deteksi real-time di HP
-                                qrbox: dynamicQrBox,  // Box penargetan lebar & pendek
-                                aspectRatio: 1.777778 // Rasio aspek 16:9 yang cocok untuk kamera smartphone modern
-                            },
-                            (decodedText) => {
-                                input.value = decodedText;
-                                const found = assets.find(a => a.kode === decodedText);
-                                if (found) {
-                                    showAssetDetail(found);
-                                    // Berhenti dan tutup kamera setelah barcode terdeteksi
-                                    window.activeScanner.stop().then(() => {
-                                        reader.classList.add('hidden');
-                                        scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
-                                    }).catch(err => console.error(err));
-                                } else {
-                                    showToast("Kode tidak terdaftar di database: " + decodedText, "warning");
-                                    // Tetap scanning jika barang tidak ketemu, agar user bisa scan ulang
-                                }
-                            },
-                            (errorMessage) => {
-                                // Redundant frame scanning error disenyapkan agar tidak merusak performa HP
+                    const scanSuccessCallback = (decodedText) => {
+                        input.value = decodedText;
+                        const found = assets.find(a => a.kode === decodedText);
+                        if (found) {
+                            showAssetDetail(found);
+                            // Berhenti dan tutup kamera setelah barcode terdeteksi
+                            window.activeScanner.stop().then(() => {
+                                reader.classList.add('hidden');
+                                scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                            }).catch(err => console.error(err));
+                        } else {
+                            showToast("Kode tidak terdaftar di database: " + decodedText, "warning");
+                        }
+                    };
+
+                    const config = {
+                        fps: 15,
+                        qrbox: dynamicQrBox,
+                        aspectRatio: 1.777778
+                    };
+
+                    // Mencari daftar kamera fisik pada HP
+                    Html5Qrcode.getCameras().then(async (devices) => {
+                        if (devices && devices.length > 0) {
+                            // Filter lensa belakang utama untuk mencegah memilih lensa dummy/makro yang menghasilkan layar hitam
+                            let backCamera = devices.find(device => 
+                                device.label.toLowerCase().includes('back') || 
+                                device.label.toLowerCase().includes('rear') || 
+                                device.label.toLowerCase().includes('environment') ||
+                                device.label.toLowerCase().includes('belakang')
+                            );
+                            
+                            // Jika tidak ditemukan label spesifik, gunakan kamera terakhir (paling sering merupakan kamera utama belakang)
+                            const cameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
+                            
+                            try {
+                                await window.activeScanner.start(cameraId, config, scanSuccessCallback);
+                                scanBtnText.innerText = "Matikan Kamera Scan";
+                            } catch (err) {
+                                console.warn("Gagal start menggunakan ID kamera khusus, menjalankan fallback facingMode...", err);
+                                fallbackFacingMode();
                             }
-                        );
-                    } catch (err) {
-                        console.error("Camera Access Error:", err);
-                        showToast("Kamera tidak dapat diakses atau diblokir oleh sistem", "error");
-                        reader.classList.add('hidden');
-                        scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                        } else {
+                            fallbackFacingMode();
+                        }
+                    }).catch(err => {
+                        console.warn("Gagal mendapatkan list kamera, menjalankan fallback facingMode...", err);
+                        fallbackFacingMode();
+                    });
+
+                    async function fallbackFacingMode() {
+                        try {
+                            await window.activeScanner.start({ facingMode: "environment" }, config, scanSuccessCallback);
+                            scanBtnText.innerText = "Matikan Kamera Scan";
+                        } catch (err) {
+                            console.error("Metode fallback facingMode gagal:", err);
+                            showToast("Kamera diblokir atau gagal diakses oleh browser", "error");
+                            reader.classList.add('hidden');
+                            scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                        }
                     }
                 }
             };
@@ -1259,17 +1288,17 @@
 
                             <div class="space-y-1">
                                 <label class="text-[11px] font-bold text-gray-600">Kepala Ruang (Penanggung Jawab)</label>
-                                <input type="text" id="ba-sign-kepala" required value="Isikan Nama Kepala Ruang, S.Kep." class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
+                                <input type="text" id="ba-sign-kepala" required value="Siti Rahmawati, S.Kep." class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
                             </div>
 
                             <div class="space-y-1">
                                 <label class="text-[11px] font-bold text-gray-600">Koordinator Rumah Tangga</label>
-                                <input type="text" id="ba-sign-koor" required value="Sutomo" class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
+                                <input type="text" id="ba-sign-koor" required value="Adi Wijaya, S.E." class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
                             </div>
 
                             <div class="space-y-1">
                                 <label class="text-[11px] font-bold text-gray-600">Manager Umum</label>
-                                <input type="text" id="ba-sign-manager" required value="Dani Febriyanto,Amd.KL" class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
+                                <input type="text" id="ba-sign-manager" required value="dr. H. Tomos Junior, M.M." class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
                             </div>
 
                             <button type="submit" class="w-full bg-sky-600 text-white font-bold py-3 rounded-xl hover:bg-sky-700 transition active:scale-[0.98] shadow-lg shadow-sky-100 flex items-center justify-center gap-2 text-sm">
