@@ -43,7 +43,38 @@
             100% { transform: translateX(-100%); }
         }
         @media print {
-            .no-print { display: none !important; }
+            body * {
+                visibility: hidden;
+            }
+            #print-section, #print-section * {
+                visibility: visible;
+            }
+            #print-section {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            #modal-container {
+                position: absolute;
+                left: 0;
+                top: 0;
+                background: transparent !important;
+                backdrop-filter: none !important;
+                padding: 0 !important;
+            }
+            #modal-body {
+                box-shadow: none !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            .no-print {
+                display: none !important;
+            }
         }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
@@ -90,6 +121,9 @@
                 <button onclick="showPage('data-mutasi')" class="nav-btn w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-all duration-200" data-page="data-mutasi">
                     <i class="fas fa-clipboard-list w-6 text-emerald-400"></i> Riwayat Mutasi
                 </button>
+                <button onclick="showPage('kerusakan-aset')" class="nav-btn w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-all duration-200" data-page="kerusakan-aset">
+                    <i class="fas fa-file-circle-xmark w-6 text-rose-400"></i> B.A. Kerusakan Aset
+                </button>
                 
                 <div class="px-6 mt-6 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administrasi</div>
                 <button onclick="showPage('laporan')" class="nav-btn w-full flex items-center px-6 py-3 hover:bg-slate-800 transition-all duration-200" data-page="laporan">
@@ -133,6 +167,7 @@
         </main>
     </div>
 
+    <!-- Modal Backdrop & Window Container -->
     <div id="modal-container" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4 transition-all duration-300">
         <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-300" id="modal-body">
             <div id="modal-content" class="p-8"></div>
@@ -146,13 +181,13 @@
 
         // Firebase Configuration
         const firebaseConfig = {
-  apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
-  authDomain: "inventarisalkes-f3992.firebaseapp.com",
-  projectId: "inventarisalkes-f3992",
-  storageBucket: "inventarisalkes-f3992.firebasestorage.app",
-  messagingSenderId: "83234246153",
-  appId: "1:83234246153:web:0acdd739523b409643f2d8"
-};
+            apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
+            authDomain: "inventarisalkes-f3992.firebaseapp.com",
+            projectId: "inventarisalkes-f3992",
+            storageBucket: "inventarisalkes-f3992.firebasestorage.app",
+            messagingSenderId: "83234246153",
+            appId: "1:83234246153:web:0acdd739523b409643f2d8"
+        };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -162,6 +197,7 @@
         let assets = [];
         let rooms = [];
         let mutations = [];
+        let damageReports = [];
         let currentUser = null;
         let currentCompressedBase64 = "";
 
@@ -197,7 +233,6 @@
             setTimeout(() => div.remove(), 3000);
         };
 
-        // Real-time Data Sync
         const loadData = () => {
             if (!currentUser) return;
 
@@ -216,13 +251,17 @@
                 mutations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 refreshCurrentView();
             }, (err) => console.error(err));
+
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'damage_reports'), (snap) => {
+                damageReports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                refreshCurrentView();
+            }, (err) => console.error(err));
         };
 
         const refreshCurrentView = () => {
             const activeBtn = document.querySelector('.nav-btn.sidebar-active');
             if (activeBtn) {
                 const page = activeBtn.getAttribute('data-page');
-                // Don't refresh if we are currently editing/inputting to avoid state loss
                 if (page !== 'input-aset') showPage(page);
             }
         };
@@ -234,7 +273,7 @@
             }
         };
 
-        // Router
+        // Router Mapping
         window.showPage = (page) => {
             const container = document.getElementById('content-container');
             const title = document.getElementById('page-title');
@@ -275,6 +314,11 @@
                     title.innerText = "Riwayat Mutasi";
                     subtitle.innerText = "Log lengkap aktivitas perpindahan barang";
                     renderDataMutasi(container);
+                    break;
+                case 'kerusakan-aset':
+                    title.innerText = "B.A. Kerusakan Aset";
+                    subtitle.innerText = "Daftar & Form Berita Acara Kerusakan Alat Medis";
+                    renderKerusakanAset(container);
                     break;
                 case 'master-ruangan':
                     title.innerText = "Pengaturan Ruang";
@@ -326,10 +370,10 @@
                     </div>
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center text-xl"><i class="fas fa-wallet"></i></div>
+                            <div class="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center text-xl"><i class="fas fa-heart-crack"></i></div>
                         </div>
-                        <h4 class="text-slate-500 text-xs font-bold uppercase tracking-wider">Nilai Total</h4>
-                        <p class="text-xl font-bold text-slate-800 truncate">Rp ${totalVal.toLocaleString('id-ID')}</p>
+                        <h4 class="text-slate-500 text-xs font-bold uppercase tracking-wider">Aset Rusak</h4>
+                        <p class="text-3xl font-bold text-slate-800">${damageReports.length}</p>
                     </div>
                 </div>
 
@@ -432,7 +476,7 @@
                 </div>
             `;
 
-            // Image Compression Handling
+            // Auto-compression script
             const fileInput = document.getElementById('form-file');
             fileInput.onchange = (e) => {
                 const file = e.target.files[0];
@@ -621,7 +665,6 @@
         };
 
         const renderMutasi = (container) => {
-            // Set default date picker to today (format YYYY-MM-DD)
             const today = new Date().toISOString().split('T')[0];
 
             container.innerHTML = `
@@ -679,7 +722,6 @@
 
                 if (jumlah > asset.jumlah) return notify("Jumlah melebihi stok!", "error");
 
-                // Format input date (YYYY-MM-DD) to Indonesian formatted date string (DD/MM/YYYY or standard Localized format)
                 let formattedTanggal = new Date().toLocaleDateString('id-ID');
                 if (inputTanggal) {
                     const dateParts = inputTanggal.split('-');
@@ -730,6 +772,7 @@
                                     <th class="px-6 py-4">Dari</th>
                                     <th class="px-6 py-4">Ke</th>
                                     <th class="px-6 py-4">Status</th>
+                                    <th class="px-6 py-4 text-center">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -747,6 +790,16 @@
                                                 ${m.jenis}
                                             </span>
                                         </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <div class="flex justify-center space-x-2">
+                                                <button onclick="editMutation('${m.id}')" class="w-8 h-8 rounded-lg text-amber-500 hover:bg-amber-50" title="Edit Riwayat Mutasi">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button onclick="deleteMutation('${m.id}')" class="w-8 h-8 rounded-lg text-red-500 hover:bg-red-50" title="Hapus Riwayat Mutasi">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -754,6 +807,456 @@
                     </div>
                 </div>
             `;
+        };
+
+        window.editMutation = (id) => {
+            const mut = mutations.find(m => m.id === id);
+            if (!mut) return;
+
+            const modal = document.getElementById('modal-container');
+            const content = document.getElementById('modal-content');
+            modal.classList.remove('hidden');
+
+            content.innerHTML = `
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">Edit Riwayat Mutasi</h3>
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+                </div>
+                <form id="edit-mutation-form" class="space-y-4">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase">Nama Aset</label>
+                        <input type="text" value="${mut.namaAsset}" disabled class="w-full p-3 bg-slate-100 border rounded-xl outline-none text-slate-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase">Serial Number (SN)</label>
+                        <input type="text" value="${mut.sn || '-'}" disabled class="w-full p-3 bg-slate-100 border rounded-xl outline-none text-slate-500 font-mono">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Asal *</label>
+                            <select id="edit-mut-asal" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                ${rooms.map(r => `<option value="${r.name}" ${mut.asal === r.name ? 'selected' : ''}>${r.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Tujuan *</label>
+                            <select id="edit-mut-tujuan" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                ${rooms.map(r => `<option value="${r.name}" ${mut.lokasiTujuan === r.name ? 'selected' : ''}>${r.name}</option>`).join('')}
+                                <option value="Vendor Perbaikan" ${mut.lokasiTujuan === 'Vendor Perbaikan' ? 'selected' : ''}>Vendor Perbaikan</option>
+                                <option value="Gudang Afkir" ${mut.lokasiTujuan === 'Gudang Afkir' ? 'selected' : ''}>Gudang Afkir</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Jumlah Unit *</label>
+                            <input type="number" id="edit-mut-jumlah" required value="${mut.jumlah}" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Tanggal (DD/MM/YYYY) *</label>
+                            <input type="text" id="edit-mut-tanggal" required value="${mut.tanggal}" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase">Keterangan / Alasan</label>
+                        <textarea id="edit-mut-ket" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 h-20">${mut.keterangan || ''}</textarea>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-4 border-t">
+                        <button type="button" onclick="document.getElementById('modal-container').classList.add('hidden')" class="px-6 py-2 text-slate-500 font-bold">Batal</button>
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md">Simpan Perubahan</button>
+                    </div>
+                </form>
+            `;
+
+            document.getElementById('edit-mutation-form').onsubmit = async (e) => {
+                e.preventDefault();
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mutations', id), {
+                        asal: document.getElementById('edit-mut-asal').value,
+                        lokasiTujuan: document.getElementById('edit-mut-tujuan').value,
+                        jumlah: Number(document.getElementById('edit-mut-jumlah').value),
+                        tanggal: document.getElementById('edit-mut-tanggal').value,
+                        keterangan: document.getElementById('edit-mut-ket').value,
+                        updatedAt: Timestamp.now()
+                    });
+                    notify("Riwayat mutasi berhasil diperbarui");
+                    document.getElementById('modal-container').classList.add('hidden');
+                    showPage('data-mutasi');
+                } catch (err) {
+                    notify("Gagal memperbarui mutasi", "error");
+                }
+            };
+        };
+
+        window.deleteMutation = async (id) => {
+            if (confirm("Hapus catatan riwayat mutasi ini?")) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mutations', id));
+                    notify("Catatan mutasi berhasil dihapus");
+                    showPage('data-mutasi');
+                } catch (err) {
+                    notify("Gagal menghapus", "error");
+                }
+            }
+        };
+
+        const renderKerusakanAset = (container) => {
+            const today = new Date().toISOString().split('T')[0];
+            container.innerHTML = `
+                <div class="mb-6 flex space-x-4 border-b pb-3">
+                    <button id="tab-damage-list" onclick="switchDamageTab('list')" class="font-bold pb-2 text-blue-600 border-b-2 border-blue-600">
+                        <i class="fas fa-list-check mr-1"></i> Daftar Berita Acara
+                    </button>
+                    <button id="tab-damage-form" onclick="switchDamageTab('form')" class="font-bold pb-2 text-slate-400 hover:text-slate-600">
+                        <i class="fas fa-file-signature mr-1"></i> Buat Berita Acara Baru
+                    </button>
+                </div>
+
+                <!-- Tab List View -->
+                <div id="damage-list-view" class="space-y-4 animate-fadeIn">
+                    <div class="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                        <div class="p-4 bg-slate-50 border-b flex justify-between items-center">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Log Kerusakan Alkes</h3>
+                            <div class="text-xs text-slate-400 font-bold">Total: ${damageReports.length} Laporan</div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-slate-100 text-slate-500 uppercase text-[10px] font-black">
+                                    <tr>
+                                        <th class="px-6 py-4">Tanggal</th>
+                                        <th class="px-6 py-4">Nama Alat</th>
+                                        <th class="px-6 py-4">Kode/SN</th>
+                                        <th class="px-6 py-4">Jenis</th>
+                                        <th class="px-6 py-4">Detail</th>
+                                        <th class="px-6 py-4 text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    ${damageReports.map(dr => `
+                                        <tr class="hover:bg-slate-50 transition-colors">
+                                            <td class="px-6 py-4 font-medium text-slate-600">${dr.tanggal}</td>
+                                            <td class="px-6 py-4 font-bold text-slate-800">${dr.namaAlat}</td>
+                                            <td class="px-6 py-4 font-mono text-xs">${dr.kode || '-'}</td>
+                                            <td class="px-6 py-4">
+                                                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                                    dr.jenisKerusakan === 'Berat' ? 'bg-red-100 text-red-600' : 
+                                                    dr.jenisKerusakan === 'Sedang' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
+                                                }">
+                                                    ${dr.jenisKerusakan}
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate">${dr.detail || '-'}</td>
+                                            <td class="px-6 py-4 text-center">
+                                                <div class="flex justify-center space-x-2">
+                                                    <button onclick="printDamageReport('${dr.id}')" class="w-8 h-8 rounded-lg text-blue-500 hover:bg-blue-50" title="Cetak Berita Acara">
+                                                        <i class="fas fa-print"></i>
+                                                    </button>
+                                                    <button onclick="editDamageReport('${dr.id}')" class="w-8 h-8 rounded-lg text-amber-500 hover:bg-amber-50" title="Edit Laporan">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button onclick="deleteDamageReport('${dr.id}')" class="w-8 h-8 rounded-lg text-red-500 hover:bg-red-50" title="Hapus Laporan">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                    ${damageReports.length === 0 ? `
+                                        <tr>
+                                            <td colspan="6" class="px-6 py-12 text-center text-slate-400">Belum ada Berita Acara Kerusakan. Silakan buat baru!</td>
+                                        </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Form View -->
+                <div id="damage-form-view" class="hidden">
+                    <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border p-8">
+                        <form id="damage-report-form" class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Pilih Aset Terdaftar *</label>
+                                    <select id="dr-asset-select" onchange="autoFillDamageAsset(this)" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="">-- Pilih Aset --</option>
+                                        ${assets.map(a => `<option value="${a.id}" data-nama="${a.nama}" data-sn="${a.sn || ''}" data-lokasi="${a.lokasi}">${a.nama} [${a.sn || 'No SN'}]</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Tanggal Laporan *</label>
+                                    <input type="date" id="dr-tanggal" required value="${today}" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Nama Alat/Aset *</label>
+                                    <input type="text" id="dr-nama" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Kode Aset / Serial Number (SN)</label>
+                                    <input type="text" id="dr-kode" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono">
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Lokasi Penempatan</label>
+                                    <input type="text" id="dr-lokasi" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Jenis Kerusakan *</label>
+                                    <select id="dr-jenis" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="Ringan">Ringan (Masih bisa digunakan sebagian)</option>
+                                        <option value="Sedang">Sedang (Perlu perbaikan ringan)</option>
+                                        <option value="Berat">Berat (Mati total / Rusak parah)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-slate-500 uppercase">Detail Kerusakan / Kronologi Kejadian *</label>
+                                <textarea id="dr-detail" required placeholder="Jelaskan secara detail bagian yang rusak, kronologi jika ada, atau indikasi kegagalan alat..." class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 h-32"></textarea>
+                            </div>
+                            <div class="flex justify-end space-x-3 pt-6 border-t">
+                                <button type="button" onclick="switchDamageTab('list')" class="px-6 py-3 font-bold text-slate-500">Batal</button>
+                                <button type="submit" class="px-10 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200">Simpan Berita Acara</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            window.switchDamageTab = (tab) => {
+                const tabList = document.getElementById('tab-damage-list');
+                const tabForm = document.getElementById('tab-damage-form');
+                const listView = document.getElementById('damage-list-view');
+                const formView = document.getElementById('damage-form-view');
+
+                if (tab === 'list') {
+                    tabList.className = "font-bold pb-2 text-blue-600 border-b-2 border-blue-600";
+                    tabForm.className = "font-bold pb-2 text-slate-400 hover:text-slate-600";
+                    listView.classList.remove('hidden');
+                    formView.classList.add('hidden');
+                } else {
+                    tabForm.className = "font-bold pb-2 text-blue-600 border-b-2 border-blue-600";
+                    tabList.className = "font-bold pb-2 text-slate-400 hover:text-slate-600";
+                    formView.classList.remove('hidden');
+                    listView.classList.add('hidden');
+                }
+            };
+
+            window.autoFillDamageAsset = (selectEl) => {
+                const opt = selectEl.options[selectEl.selectedIndex];
+                if (!opt.value) return;
+                document.getElementById('dr-nama').value = opt.getAttribute('data-nama') || '';
+                document.getElementById('dr-kode').value = opt.getAttribute('data-sn') || '';
+                document.getElementById('dr-lokasi').value = opt.getAttribute('data-lokasi') || '';
+            };
+
+            document.getElementById('damage-report-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const inputDate = document.getElementById('dr-tanggal').value;
+                let formattedTanggal = new Date().toLocaleDateString('id-ID');
+                if (inputDate) {
+                    const dateParts = inputDate.split('-');
+                    if (dateParts.length === 3) {
+                        formattedTanggal = `${Number(dateParts[2])}/${Number(dateParts[1])}/${dateParts[0]}`;
+                    }
+                }
+
+                const data = {
+                    assetId: document.getElementById('dr-asset-select').value,
+                    tanggal: formattedTanggal,
+                    rawTanggal: inputDate,
+                    namaAlat: document.getElementById('dr-nama').value,
+                    kode: document.getElementById('dr-kode').value,
+                    lokasi: document.getElementById('dr-lokasi').value,
+                    jenisKerusakan: document.getElementById('dr-jenis').value,
+                    detail: document.getElementById('dr-detail').value,
+                    createdAt: Timestamp.now()
+                };
+
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'damage_reports'), data);
+                    notify("Berita Acara Kerusakan berhasil dibuat!");
+                    showPage('kerusakan-aset');
+                } catch (err) {
+                    notify("Gagal menyimpan Berita Acara", "error");
+                }
+            };
+        };
+
+        window.printDamageReport = (id) => {
+            const dr = damageReports.find(d => d.id === id);
+            if (!dr) return;
+
+            const modal = document.getElementById('modal-container');
+            const content = document.getElementById('modal-content');
+            modal.classList.remove('hidden');
+
+            content.innerHTML = `
+                <div class="flex justify-between items-center mb-6 no-print">
+                    <h3 class="text-xl font-bold text-slate-800">Preview Berita Acara</h3>
+                    <div class="flex space-x-2">
+                        <button onclick="window.print()" class="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-blue-700">
+                            <i class="fas fa-print mr-2"></i> Cetak Berita Acara
+                        </button>
+                        <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl text-sm font-bold">
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Printable Document Sheet (A4 Styled Layout) -->
+                <div id="print-section" class="bg-white p-12 border max-w-2xl mx-auto shadow-inner" style="font-family: 'Times New Roman', Times, serif;">
+                    <!-- Hospital Official Letterhead (KOP) -->
+                    <div class="text-center pb-2 mb-6 border-b-4 border-double border-blue-900" style="color: #002060;">
+                        <h1 class="text-2xl font-black uppercase tracking-wider leading-none mb-1">RSU DADI KELUARGA PURWOKERTO</h1>
+                        <p class="text-xs font-semibold">Jl. Sultan Agung No. 8A, Karangklesem, Purwokerto Selatan, Banyumas</p>
+                        <p class="text-[10px] italic">Telp: (0281) 6844000 | Email: info@dadikeluarga.co.id</p>
+                    </div>
+
+                    <!-- Title of Document -->
+                    <div class="text-center my-6">
+                        <h2 class="text-lg font-bold underline uppercase tracking-wide">BERITA ACARA KERUSAKAN ALAT / ASET</h2>
+                        <p class="text-xs font-semibold text-slate-600 mt-1 font-sans">Nomor: BAK/ALK/${new Date(dr.createdAt?.seconds * 1000 || Date.now()).getFullYear()}/${dr.id.substring(0, 5).toUpperCase()}</p>
+                    </div>
+
+                    <!-- Intro Statement -->
+                    <p class="text-sm leading-relaxed mb-4 text-justify">
+                        Pada hari ini, tanggal <strong>${dr.tanggal}</strong>, telah dilaporkan adanya kerusakan operasional pada unit alat/aset milik RSU Dadi Keluarga Purwokerto dengan spesifikasi detail berikut:
+                    </p>
+
+                    <!-- Damage Details Table -->
+                    <table class="w-full text-sm border-collapse border border-slate-400 mb-6 font-sans">
+                        <tbody>
+                            <tr>
+                                <td class="border border-slate-400 px-4 py-3 font-bold bg-slate-50 w-1/3 text-slate-700">Nama Alat / Aset</td>
+                                <td class="border border-slate-400 px-4 py-3 text-slate-800 font-semibold">${dr.namaAlat}</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-400 px-4 py-3 font-bold bg-slate-50 text-slate-700">Kode / Serial Number</td>
+                                <td class="border border-slate-400 px-4 py-3 font-mono text-xs text-slate-800">${dr.kode || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-400 px-4 py-3 font-bold bg-slate-50 text-slate-700">Lokasi Penempatan</td>
+                                <td class="border border-slate-400 px-4 py-3 text-slate-800">${dr.lokasi || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-400 px-4 py-3 font-bold bg-slate-50 text-slate-700">Jenis Kerusakan</td>
+                                <td class="border border-slate-400 px-4 py-3 font-bold text-rose-600">${dr.jenisKerusakan}</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-slate-400 px-4 py-3 font-bold bg-slate-50 text-slate-700">Detail Kerusakan</td>
+                                <td class="border border-slate-400 px-4 py-3 text-justify leading-relaxed text-slate-600">${dr.detail}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <p class="text-sm leading-relaxed mb-12 text-justify">
+                        Demikian Berita Acara Kerusakan ini dibuat secara sadar, transparan, dan sebenar-benarnya untuk dijadikan berkas pengajuan tindakan perbaikan (service) atau pengadaan barang baru.
+                    </p>
+
+                    <!-- Official Signatures Block -->
+                    <div class="grid grid-cols-3 gap-4 text-center text-xs mt-16 pt-4">
+                        <div>
+                            <p class="font-semibold">Pembuat Laporan,</p>
+                            <p class="font-bold mb-20">Kepala Ruang</p>
+                            <p class="underline">( ........................................ )</p>
+                            <p class="text-[10px] text-slate-400 font-sans mt-0.5">NIP / ID Staff</p>
+                        </div>
+                        <div>
+                            <p class="font-semibold">Mengetahui,</p>
+                            <p class="font-bold mb-20">Koordinator Rumah Tangga</p>
+                            <p class="underline">( ........................................ )</p>
+                            <p class="text-[10px] text-slate-400 font-sans mt-0.5">NIP / ID Staff</p>
+                        </div>
+                        <div>
+                            <p class="font-semibold">Menyetujui,</p>
+                            <p class="font-bold mb-20">Manager Umum</p>
+                            <p class="underline">( ........................................ )</p>
+                            <p class="text-[10px] text-slate-400 font-sans mt-0.5">NIP / ID Staff</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        window.editDamageReport = (id) => {
+            const dr = damageReports.find(d => d.id === id);
+            if (!dr) return;
+
+            const modal = document.getElementById('modal-container');
+            const content = document.getElementById('modal-content');
+            modal.classList.remove('hidden');
+
+            content.innerHTML = `
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">Edit Berita Acara</h3>
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+                </div>
+                <form id="edit-damage-form" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Nama Alat</label>
+                            <input type="text" id="edit-dr-nama" value="${dr.namaAlat}" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Kode/SN</label>
+                            <input type="text" id="edit-dr-kode" value="${dr.kode || ''}" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Tanggal (DD/MM/YYYY) *</label>
+                            <input type="text" id="edit-dr-tanggal" value="${dr.tanggal}" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-slate-500 uppercase">Jenis Kerusakan *</label>
+                            <select id="edit-dr-jenis" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="Ringan" ${dr.jenisKerusakan === 'Ringan' ? 'selected' : ''}>Ringan</option>
+                                <option value="Sedang" ${dr.jenisKerusakan === 'Sedang' ? 'selected' : ''}>Sedang</option>
+                                <option value="Berat" ${dr.jenisKerusakan === 'Berat' ? 'selected' : ''}>Berat</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase">Detail Kerusakan *</label>
+                        <textarea id="edit-dr-detail" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 h-24">${dr.detail || ''}</textarea>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-4 border-t">
+                        <button type="button" onclick="document.getElementById('modal-container').classList.add('hidden')" class="px-6 py-2 text-slate-500 font-bold">Batal</button>
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold">Simpan Perubahan</button>
+                    </div>
+                </form>
+            `;
+
+            document.getElementById('edit-damage-form').onsubmit = async (e) => {
+                e.preventDefault();
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'damage_reports', id), {
+                        namaAlat: document.getElementById('edit-dr-nama').value,
+                        kode: document.getElementById('edit-dr-kode').value,
+                        tanggal: document.getElementById('edit-dr-tanggal').value,
+                        jenisKerusakan: document.getElementById('edit-dr-jenis').value,
+                        detail: document.getElementById('edit-dr-detail').value,
+                        updatedAt: Timestamp.now()
+                    });
+                    notify("Berita Acara berhasil diperbarui");
+                    document.getElementById('modal-container').classList.add('hidden');
+                    showPage('kerusakan-aset');
+                } catch (err) {
+                    notify("Gagal menyimpan perubahan", "error");
+                }
+            };
+        };
+
+        window.deleteDamageReport = async (id) => {
+            if (confirm("Hapus Berita Acara Kerusakan ini?")) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'damage_reports', id));
+                    notify("Berita Acara berhasil dihapus");
+                    showPage('kerusakan-aset');
+                } catch (err) {
+                    notify("Gagal menghapus", "error");
+                }
+            }
         };
 
         const renderMasterRuangan = (container) => {
