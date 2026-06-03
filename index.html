@@ -116,7 +116,7 @@
                     <i class="fas fa-hospital-alt text-sky-900 text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS NON MEDIS RSDK</h1>
+                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS ALAT MEDIS RSDK</h1>
                     <p class="text-xs text-sky-300">DEVELOPED BY:TOMOS JR2026</p>
                 </div>
             </div>
@@ -228,13 +228,13 @@
         import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
-  apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
-  authDomain: "inventarisalkes-f3992.firebaseapp.com",
-  projectId: "inventarisalkes-f3992",
-  storageBucket: "inventarisalkes-f3992.firebasestorage.app",
-  messagingSenderId: "83234246153",
-  appId: "1:83234246153:web:0acdd739523b409643f2d8"
-};
+            apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
+            authDomain: "inventarisalkes-f3992.firebaseapp.com",
+            projectId: "inventarisalkes-f3992",
+            storageBucket: "inventarisalkes-f3992.firebasestorage.app",
+            messagingSenderId: "83234246153",
+            appId: "1:83234246153:web:0acdd739523b409643f2d8"
+        };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -316,13 +316,20 @@
         };
 
         // --- Navigation Logic ---
-        window.switchTab = (tabId) => {
-            // OPTIMASI: Matikan kamera/scanner saat berpindah tab untuk menghemat baterai & merilis kamera di HP
-            if (window.activeScanner && window.activeScanner.isScanning) {
-                window.activeScanner.stop().then(() => {
-                    const reader = document.getElementById('reader');
-                    if (reader) reader.classList.add('hidden');
-                }).catch(err => console.error("Gagal stop scanner saat ganti tab:", err));
+        window.switchTab = async (tabId) => {
+            // OPTIMASI: Matikan kamera/scanner saat berpindah tab untuk menghemat baterai & merilis kamera di HP secara tuntas
+            if (window.activeScanner) {
+                try {
+                    if (window.activeScanner.isScanning) {
+                        await window.activeScanner.stop();
+                    }
+                    window.activeScanner.clear();
+                    window.activeScanner = null;
+                } catch (err) {
+                    console.error("Gagal stop scanner saat ganti tab:", err);
+                }
+                const reader = document.getElementById('reader');
+                if (reader) reader.classList.add('hidden');
             }
 
             currentTab = tabId;
@@ -613,7 +620,7 @@
                 const filtered = assets.filter(a => 
                     a.nama.toLowerCase().includes(term) || 
                     a.merk.toLowerCase().includes(term) || 
-                    a.kode.toLowerCase().includes(term)
+                    (a.kode && a.kode.toLowerCase().includes(term))
                 );
                 document.getElementById('db-table-body').innerHTML = renderTableRows(filtered);
             };
@@ -687,12 +694,12 @@
                                 <span class="text-xs text-gray-400 font-bold uppercase">ATAU</span>
                                 <div class="flex-1 h-px bg-gray-200"></div>
                             </div>
-                            <!-- Desain tombol dengan bubble effect, shadow, dan gradient biru langit yang modern -->
+                            <!-- Desain tombol modern dengan bayangan halus, transisi transparan, dan gradient segar -->
                             <button id="btn-scan" class="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-sky-200 hover:shadow-sky-300 transition-all duration-300 active:scale-[0.99]">
                                 <i class="fas fa-camera"></i> <span id="scan-btn-text">Aktifkan Kamera Scan Barcode</span>
                             </button>
-                            <!-- Kontainer kamera dengan min-height solid agar inisialisasi layout video berjalan lancar -->
-                            <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-md mx-auto shadow-inner" style="min-height: 250px;"></div>
+                            <!-- Kontainer kamera dengan pengaturan flex, border radius, serta aspek rasio responsif -->
+                            <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-md mx-auto shadow-inner relative" style="min-height: 250px;"></div>
                         </div>
                     </div>
 
@@ -720,34 +727,38 @@
                 }
             };
 
-            // OPTIMASI SELEKSI KAMERA HP (GUNA MENGHINDARI LAYAR HITAM)
+            // PERBAIKAN UTAMA: LOGIKA PROSES INISIALISASI & DETEKSI KAMERA FISIK PADA SMARTPHONE
             document.getElementById('btn-scan').onclick = async () => {
                 const reader = document.getElementById('reader');
                 
-                // Inisialisasi library scanner jika belum ada secara global
+                // 1. Inisialisasi scanner jika belum terdaftar secara global
                 if (!window.activeScanner) {
                     window.activeScanner = new Html5Qrcode("reader");
                 }
 
+                // 2. Jika reader terlihat (kamera sedang aktif/mencoba aktif), lakukan stop
                 if (!reader.classList.contains('hidden')) {
-                    // Jika saat ini kamera menyala, matikan dan sembunyikan container
-                    scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
-                    reader.classList.add('hidden');
-                    if (window.activeScanner.isScanning) {
-                        try {
+                    scanBtnText.innerText = "Menonaktifkan Kamera...";
+                    try {
+                        if (window.activeScanner.isScanning) {
                             await window.activeScanner.stop();
-                        } catch (err) {
-                            console.error("Gagal menghentikan scanner kamera:", err);
                         }
+                    } catch (err) {
+                        console.warn("Info stop scanner:", err);
+                    } finally {
+                        window.activeScanner.clear();
+                        reader.classList.add('hidden');
+                        scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
                     }
                 } else {
-                    // Tampilkan container terlebih dahulu, lalu cari kamera fisik HP
+                    // 3. Memulai proses mengaktifkan kamera
                     reader.classList.remove('hidden');
                     scanBtnText.innerText = "Menghubungkan Kamera...";
                     
+                    // Box bidik yang melandai secara horizontal, dioptimalkan khusus untuk membaca baris Barcode 1D & QR Code
                     const dynamicQrBox = (viewfinderWidth, viewfinderHeight) => {
                         const width = Math.floor(viewfinderWidth * 0.85);
-                        const height = Math.floor(viewfinderWidth * 0.35); // Horizontal melandai agar presisi menangkap Barcode
+                        const height = Math.floor(viewfinderWidth * 0.45); 
                         return { width: width, height: height };
                     };
 
@@ -756,11 +767,12 @@
                         const found = assets.find(a => a.kode === decodedText);
                         if (found) {
                             showAssetDetail(found);
-                            // Berhenti dan tutup kamera setelah barcode terdeteksi
+                            // Hentikan dan tutup kamera langsung setelah barcode terdeteksi
                             window.activeScanner.stop().then(() => {
+                                window.activeScanner.clear();
                                 reader.classList.add('hidden');
                                 scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
-                            }).catch(err => console.error(err));
+                            }).catch(err => console.error("Gagal stop setelah scan sukses:", err));
                         } else {
                             showToast("Kode tidak terdaftar di database: " + decodedText, "warning");
                         }
@@ -772,42 +784,46 @@
                         aspectRatio: 1.777778
                     };
 
-                    // Mencari daftar kamera fisik pada HP
+                    // PENDETEKSIAN INTEGRAL: Filter kamera belakang utama untuk meminimalkan bug layar hitam akibat pemilihan lensa dummy/sensor kedalaman
                     Html5Qrcode.getCameras().then(async (devices) => {
                         if (devices && devices.length > 0) {
-                            // Filter lensa belakang utama untuk mencegah memilih lensa dummy/makro yang menghasilkan layar hitam
-                            let backCamera = devices.find(device => 
-                                device.label.toLowerCase().includes('back') || 
-                                device.label.toLowerCase().includes('rear') || 
-                                device.label.toLowerCase().includes('environment') ||
-                                device.label.toLowerCase().includes('belakang')
-                            );
-                            
-                            // Jika tidak ditemukan label spesifik, gunakan kamera terakhir (paling sering merupakan kamera utama belakang)
-                            const cameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
+                            // Cari kamera belakang utama berdasarkan kata kunci label yang komprehensif
+                            let selectedCamera = devices.find(device => {
+                                const lbl = device.label.toLowerCase();
+                                return lbl.includes('back') || 
+                                       lbl.includes('rear') || 
+                                       lbl.includes('environment') || 
+                                       lbl.includes('belakang') || 
+                                       lbl.includes('main') || 
+                                       lbl.includes('0, facing back');
+                            });
+
+                            // Jika tidak ditemukan kamera spesifik dengan kata kunci tersebut, pilih kamera terakhir dari list (seringkali kamera utama belakang pada multi-camera HP)
+                            const cameraId = selectedCamera ? selectedCamera.id : devices[devices.length - 1].id;
                             
                             try {
                                 await window.activeScanner.start(cameraId, config, scanSuccessCallback);
                                 scanBtnText.innerText = "Matikan Kamera Scan";
                             } catch (err) {
-                                console.warn("Gagal start menggunakan ID kamera khusus, menjalankan fallback facingMode...", err);
+                                console.warn("Gagal start menggunakan ID kamera khusus, mencoba metode standard...", err);
                                 fallbackFacingMode();
                             }
                         } else {
                             fallbackFacingMode();
                         }
                     }).catch(err => {
-                        console.warn("Gagal mendapatkan list kamera, menjalankan fallback facingMode...", err);
+                        console.warn("Gagal mendapatkan list kamera, beralih ke metode standar...", err);
                         fallbackFacingMode();
                     });
 
+                    // Prosedur Fallback menggunakan face mode default lingkungan luar (kamera belakang)
                     async function fallbackFacingMode() {
                         try {
                             await window.activeScanner.start({ facingMode: "environment" }, config, scanSuccessCallback);
                             scanBtnText.innerText = "Matikan Kamera Scan";
                         } catch (err) {
-                            console.error("Metode fallback facingMode gagal:", err);
-                            showToast("Kamera diblokir atau gagal diakses oleh browser", "error");
+                            console.error("Gagal memulai kamera dengan segala metode:", err);
+                            showToast("Izin akses kamera diblokir atau gagal dihubungkan", "error");
                             reader.classList.add('hidden');
                             scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
                         }
@@ -1530,7 +1546,7 @@
             showToast("Berita Acara Kerusakan berhasil dicetak!");
         };
 
-        // --- NEW: Export Mutations History to professional PDF with Hospital Kop ---
+        // --- Export Mutations History to professional PDF with Hospital Kop ---
         window.exportMutationsToPDF = () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
