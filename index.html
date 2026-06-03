@@ -116,7 +116,7 @@
                     <i class="fas fa-hospital-alt text-sky-900 text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS MEDIS RSDK</h1>
+                    <h1 class="font-bold text-xl leading-tight text-white">SISTEM INVENTARIS NON MEDIS RSDK</h1>
                     <p class="text-xs text-sky-300">DEVELOPED BY:TOMOS JR2026</p>
                 </div>
             </div>
@@ -228,13 +228,13 @@
         import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
-          apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
-          authDomain: "inventarisalkes-f3992.firebaseapp.com",
-          projectId: "inventarisalkes-f3992",
-          storageBucket: "inventarisalkes-f3992.firebasestorage.app",
-          messagingSenderId: "83234246153",
-          appId: "1:83234246153:web:0acdd739523b409643f2d8"
-        };
+  apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
+  authDomain: "inventarisalkes-f3992.firebaseapp.com",
+  projectId: "inventarisalkes-f3992",
+  storageBucket: "inventarisalkes-f3992.firebasestorage.app",
+  messagingSenderId: "83234246153",
+  appId: "1:83234246153:web:0acdd739523b409643f2d8"
+};
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -687,24 +687,12 @@
                                 <span class="text-xs text-gray-400 font-bold uppercase">ATAU</span>
                                 <div class="flex-1 h-px bg-gray-200"></div>
                             </div>
-                            
-                            <!-- Tombol Aktivasi Kamera Live -->
+                            <!-- Desain tombol dengan bubble effect, shadow, dan gradient biru langit yang modern -->
                             <button id="btn-scan" class="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-sky-200 hover:shadow-sky-300 transition-all duration-300 active:scale-[0.99]">
                                 <i class="fas fa-camera"></i> <span id="scan-btn-text">Aktifkan Kamera Scan Barcode</span>
                             </button>
-                            
-                            <!-- Kontainer kamera dengan min-height solid agar inisialisasi video berjalan lancar -->
+                            <!-- Kontainer kamera dengan min-height solid agar inisialisasi layout video berjalan lancar -->
                             <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-md mx-auto shadow-inner" style="min-height: 250px;"></div>
-                            
-                            <!-- Opsi Cadangan Unggah File Gambar (Sangat Stabil & 100% Berhasil di HP / lingkungan iframe) -->
-                            <div class="mt-4 pt-4 border-t border-gray-100 text-center">
-                                <p class="text-xs text-gray-500 mb-2">Kendala kamera live? Ambil foto barcode & unggah di bawah:</p>
-                                <label class="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-100 text-sky-700 font-bold rounded-xl cursor-pointer hover:bg-sky-200 transition text-sm">
-                                    <i class="fas fa-file-image"></i> Pilih Gambar / Ambil Foto Barcode
-                                    <input type="file" id="barcode-file-input" accept="image/*" class="hidden">
-                                </label>
-                                <p id="file-scan-status" class="text-[11px] text-gray-400 mt-1"></p>
-                            </div>
                         </div>
                     </div>
 
@@ -717,7 +705,6 @@
             const input = document.getElementById('search-input');
             const resultDiv = document.getElementById('search-result');
             const scanBtnText = document.getElementById('scan-btn-text');
-            const reader = document.getElementById('reader');
 
             input.oninput = (e) => {
                 const term = e.target.value.toLowerCase();
@@ -733,106 +720,99 @@
                 }
             };
 
-            // Fungsi Mematikan Kamera dengan Bersih
-            const stopCamera = async () => {
-                scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
-                reader.classList.add('hidden');
-                if (window.activeScanner && window.activeScanner.isScanning) {
-                    try {
-                        await window.activeScanner.stop();
-                    } catch (err) {
-                        console.error("Gagal menghentikan scanner kamera:", err);
-                    }
-                }
-                reader.innerHTML = ""; // Reset penuh container
-                window.activeScanner = null;
-            };
-
-            // Fungsi Memulai Kamera Live
-            const startCamera = async () => {
-                reader.classList.remove('hidden');
-                reader.innerHTML = ""; // Bersihkan sisa render sebelumnya
+            // OPTIMASI SELEKSI KAMERA HP (GUNA MENGHINDARI LAYAR HITAM)
+            document.getElementById('btn-scan').onclick = async () => {
+                const reader = document.getElementById('reader');
                 
-                scanBtnText.innerText = "Menghubungkan Kamera...";
-                window.activeScanner = new Html5Qrcode("reader");
+                // Inisialisasi library scanner jika belum ada secara global
+                if (!window.activeScanner) {
+                    window.activeScanner = new Html5Qrcode("reader");
+                }
 
-                const config = {
-                    fps: 10,
-                    qrbox: (viewfinderWidth, viewfinderHeight) => {
-                        return {
-                            width: Math.floor(viewfinderWidth * 0.85),
-                            height: Math.floor(viewfinderHeight * 0.40) // Target horizontal untuk barcode
-                        };
-                    },
-                    aspectRatio: 1.0 // Mengunci kompatibilitas penuh rasio aspek di seluler
-                };
-
-                try {
-                    await window.activeScanner.start(
-                        { facingMode: "environment" }, // Prioritas kamera belakang bawaan smartphone
-                        config,
-                        (decodedText) => {
-                            // Deteksi Berhasil
-                            input.value = decodedText;
-                            const found = assets.find(a => a.kode === decodedText);
-                            if (found) {
-                                showAssetDetail(found);
-                                showToast("Barcode Terdeteksi!");
-                                stopCamera();
-                            } else {
-                                showToast("Kode tidak terdaftar di database: " + decodedText, "warning");
-                            }
-                        },
-                        (errorMessage) => {
-                            // Callback scanning berkala (silent)
+                if (!reader.classList.contains('hidden')) {
+                    // Jika saat ini kamera menyala, matikan dan sembunyikan container
+                    scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                    reader.classList.add('hidden');
+                    if (window.activeScanner.isScanning) {
+                        try {
+                            await window.activeScanner.stop();
+                        } catch (err) {
+                            console.error("Gagal menghentikan scanner kamera:", err);
                         }
-                    );
-                    scanBtnText.innerText = "Matikan Kamera Scan";
-                } catch (err) {
-                    console.error("Gagal memulai kamera live:", err);
-                    showToast("Gagal mengakses kamera. Gunakan tombol 'Pilih Gambar' di bawah.", "error");
-                    stopCamera();
-                }
-            };
-
-            // Toggle Tombol Scan Kamera
-            document.getElementById('btn-scan').onclick = () => {
-                if (window.activeScanner && window.activeScanner.isScanning) {
-                    stopCamera();
+                    }
                 } else {
-                    startCamera();
-                }
-            };
+                    // Tampilkan container terlebih dahulu, lalu cari kamera fisik HP
+                    reader.classList.remove('hidden');
+                    scanBtnText.innerText = "Menghubungkan Kamera...";
+                    
+                    const dynamicQrBox = (viewfinderWidth, viewfinderHeight) => {
+                        const width = Math.floor(viewfinderWidth * 0.85);
+                        const height = Math.floor(viewfinderWidth * 0.35); // Horizontal melandai agar presisi menangkap Barcode
+                        return { width: width, height: height };
+                    };
 
-            // Scanner File Gambar (100% Bekerja di Semua Browser Handphone & Iframe Iframe)
-            const fileInput = document.getElementById('barcode-file-input');
-            fileInput.onchange = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-
-                const fileStatus = document.getElementById('file-scan-status');
-                fileStatus.innerText = "⏳ Sedang membaca gambar...";
-                
-                // Buat temporary scanner khusus untuk file image
-                const fileScanner = new Html5Qrcode("reader");
-                fileScanner.scanFile(file, true)
-                    .then(decodedText => {
+                    const scanSuccessCallback = (decodedText) => {
                         input.value = decodedText;
                         const found = assets.find(a => a.kode === decodedText);
                         if (found) {
                             showAssetDetail(found);
-                            fileStatus.innerHTML = "<span class='text-green-600 font-bold'>✓ Berhasil mendeteksi: " + decodedText + "</span>";
-                            showToast("Barcode berhasil dibaca!");
+                            // Berhenti dan tutup kamera setelah barcode terdeteksi
+                            window.activeScanner.stop().then(() => {
+                                reader.classList.add('hidden');
+                                scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                            }).catch(err => console.error(err));
                         } else {
-                            fileStatus.innerHTML = "<span class='text-amber-600 font-bold'>✕ Kode tidak terdaftar: " + decodedText + "</span>";
-                            showToast("Kode tidak terdaftar di database", "warning");
+                            showToast("Kode tidak terdaftar di database: " + decodedText, "warning");
                         }
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        fileStatus.innerHTML = "<span class='text-red-600 font-bold'>✕ Gagal membaca barcode. Pastikan gambar dekat, tegak lurus & jelas.</span>";
-                        showToast("Tidak dapat menemukan barcode", "error");
+                    };
+
+                    const config = {
+                        fps: 15,
+                        qrbox: dynamicQrBox,
+                        aspectRatio: 1.777778
+                    };
+
+                    // Mencari daftar kamera fisik pada HP
+                    Html5Qrcode.getCameras().then(async (devices) => {
+                        if (devices && devices.length > 0) {
+                            // Filter lensa belakang utama untuk mencegah memilih lensa dummy/makro yang menghasilkan layar hitam
+                            let backCamera = devices.find(device => 
+                                device.label.toLowerCase().includes('back') || 
+                                device.label.toLowerCase().includes('rear') || 
+                                device.label.toLowerCase().includes('environment') ||
+                                device.label.toLowerCase().includes('belakang')
+                            );
+                            
+                            // Jika tidak ditemukan label spesifik, gunakan kamera terakhir (paling sering merupakan kamera utama belakang)
+                            const cameraId = backCamera ? backCamera.id : devices[devices.length - 1].id;
+                            
+                            try {
+                                await window.activeScanner.start(cameraId, config, scanSuccessCallback);
+                                scanBtnText.innerText = "Matikan Kamera Scan";
+                            } catch (err) {
+                                console.warn("Gagal start menggunakan ID kamera khusus, menjalankan fallback facingMode...", err);
+                                fallbackFacingMode();
+                            }
+                        } else {
+                            fallbackFacingMode();
+                        }
+                    }).catch(err => {
+                        console.warn("Gagal mendapatkan list kamera, menjalankan fallback facingMode...", err);
+                        fallbackFacingMode();
                     });
+
+                    async function fallbackFacingMode() {
+                        try {
+                            await window.activeScanner.start({ facingMode: "environment" }, config, scanSuccessCallback);
+                            scanBtnText.innerText = "Matikan Kamera Scan";
+                        } catch (err) {
+                            console.error("Metode fallback facingMode gagal:", err);
+                            showToast("Kamera diblokir atau gagal diakses oleh browser", "error");
+                            reader.classList.add('hidden');
+                            scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                        }
+                    }
+                }
             };
         };
 
@@ -1705,4 +1685,145 @@
             if (!name) return;
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { nama: name });
             document.getElementById('master-room-name').value = "";
-            showToast("Ru
+            showToast("Ruangan berhasil ditambahkan");
+        };
+
+        window.deleteRoomConfirm = (id) => {
+            customConfirm(
+                "Hapus Ruangan", 
+                "Hapus ruangan ini? Aset yang berada di ruangan ini tidak akan terhapus namun lokasinya akan menjadi tidak valid.", 
+                async () => {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', id));
+                    showToast("Ruangan dihapus");
+                }, 
+                "danger"
+            );
+        };
+
+        window.exportToExcel = () => {
+            const worksheet = XLSX.utils.json_to_sheet(assets.map(({id, foto, createdAt, updatedAt, ...rest}) => rest));
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Aset Rumah Sakit");
+            XLSX.writeFile(workbook, `SIMARS_Export_${new Date().toLocaleDateString()}.xlsx`);
+        };
+
+        window.downloadTemplate = () => {
+            const data = [{
+                nama: "Contoh Nama Alat",
+                merk: "Merk/Tipe",
+                kode: "KodeSN123",
+                tanggal: "YYYY-MM-DD",
+                jumlah: 1,
+                harga: 1000000,
+                lokasi: rooms[0]?.nama || "Pilih Ruangan",
+                vendor: "Nama Supplier"
+            }];
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template");
+            XLSX.writeFile(wb, "Template_SIMARS.xlsx");
+        };
+
+        const handleImport = (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const data = evt.target.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet);
+                
+                showToast(`Memproses ${rows.length} data...`);
+                for (const row of rows) {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), {
+                        ...row,
+                        foto: "",
+                        createdAt: serverTimestamp()
+                    });
+                }
+                showToast("Import Berhasil!");
+                switchTab('database');
+            };
+            reader.readAsBinaryString(file);
+        };
+
+        const exportToPDF = (roomName) => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const data = assets.filter(a => a.lokasi === roomName);
+            
+            // Header Rumah Sakit (KOP)
+            doc.setFontSize(25);
+            doc.setTextColor(2, 132, 199); // Brand Sky Blue
+            doc.text("RSU DADI KELUARGA PURWOKERTO", 105, 15, { align: 'center' });
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text("Jl.Sultan Agung NO:8A Teluk-Purwokerto Selatan • Telp: (021) 555-00000", 105, 20, { align: 'center' });
+            doc.line(20, 25, 190, 25);
+
+            // Judul Dokumen
+            doc.setFontSize(14);
+            doc.setTextColor(0);
+            doc.text(`LAPORAN INVENTARIS ASET: ${roomName.toUpperCase()}`, 20, 35);
+            doc.setFontSize(9);
+            doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 20, 40);
+
+            // Tabel
+            const tableData = data.map((a, i) => [
+                i + 1, 
+                a.nama, 
+                a.merk, 
+                a.kode || '-', 
+                a.jumlah, 
+                `Rp ${parseInt(a.harga).toLocaleString()}`
+            ]);
+
+            doc.autoTable({
+                startY: 45,
+                head: [['No', 'Nama Barang', 'Merk/Tipe', 'Kode Inventaris', 'Qty', 'Harga Satuan']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [2, 132, 199] }, // Sky Blue
+                styles: { fontSize: 8 }
+            });
+
+            // Tanda Tangan
+            const finalY = doc.lastAutoTable.finalY + 20;
+            doc.text("Pencatat Barang,", 30, finalY);
+            doc.text("( ____________________ )", 30, finalY + 25);
+            
+            doc.text("Penanggung Jawab Ruangan,", 130, finalY);
+            doc.text("( ____________________ )", 130, finalY + 25);
+
+            doc.save(`Aset_${roomName}_${Date.now()}.pdf`);
+        };
+
+        // --- Utility ---
+        window.closeModal = () => {
+            document.getElementById('modal-overlay').style.display = 'none';
+        };
+
+        const showToast = (msg, type = "success") => {
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-8 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold shadow-2xl z-[200] transition transform translate-y-10 opacity-0 ${type === 'success' ? 'bg-sky-600' : type === 'error' ? 'bg-red-600' : 'bg-amber-600'}`;
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            }, 100);
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => toast.remove(), 500);
+            }, 3000);
+        };
+
+        // Init
+        document.getElementById('current-date').innerText = new Date().toLocaleString('id-ID');
+        initAuth();
+        switchTab('dashboard');
+
+    </script>
+</body>
+</html>
