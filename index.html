@@ -24,7 +24,7 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f9ff; /* Sangat muda biru langit */
+            background-color: #f0f9ff;
             overflow-x: hidden;
         }
 
@@ -246,8 +246,12 @@
         let rooms = [];
         let currentTab = 'dashboard';
         
-        // Simpan referensi scanner secara global agar bisa ditutup dengan benar saat ganti tab
         window.activeScanner = null;
+
+        // --- Custom Toast Setup ---
+        window.showToast = (message, type = "success") => {
+            alert(message); // Fallback for simplicty, can be upgraded to toast div
+        };
 
         // --- Custom Confirmation Dialog Utility ---
         let confirmCallback = null;
@@ -272,6 +276,10 @@
             if (confirmCallback) confirmCallback();
         };
 
+        window.closeModal = () => {
+            document.getElementById('modal-overlay').style.display = 'none';
+        }
+
         // --- Core Authentication ---
         const initAuth = async () => {
             try {
@@ -292,6 +300,8 @@
                 document.getElementById('user-display').innerText = `User: ${user.uid.substring(0, 8)}`;
             }
         });
+
+        initAuth();
 
         const setupListeners = () => {
             if (!user) return;
@@ -317,7 +327,6 @@
 
         // --- Navigation Logic ---
         window.switchTab = async (tabId) => {
-            // OPTIMASI: Matikan kamera/scanner saat berpindah tab untuk menghemat baterai & merilis kamera di HP secara tuntas
             if (window.activeScanner) {
                 try {
                     if (window.activeScanner.isScanning) {
@@ -331,7 +340,6 @@
                 }
             }
             
-            // Dapatkan element reader lama jika ada, hapus isinya agar tidak duplikat id video di DOM
             const reader = document.getElementById('reader');
             if (reader) {
                 reader.innerHTML = "";
@@ -687,13 +695,13 @@
 
         const renderPencarian = (container) => {
             container.innerHTML = `
-                <div class="max-w-2xl mx-auto space-y-8">
+                <div class="max-w-3xl mx-auto space-y-8">
                     <div class="card-glass p-8 rounded-[2rem] text-center">
-                        <h4 class="font-bold text-gray-800 mb-6">Scan Barcode / Cari Manual</h4>
+                        <h4 class="font-bold text-gray-800 mb-6">Scan Barcode / Cari Manual Menyeluruh</h4>
                         <div class="space-y-4">
                             <div class="relative">
                                 <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                                <input type="text" id="search-input" placeholder="Masukkan Nama Barang atau Kode Inventaris..." class="w-full pl-12 pr-4 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner">
+                                <input type="text" id="search-input" placeholder="Ketik Nama, Kode Inventaris, atau Merk Barang..." class="w-full pl-12 pr-4 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner">
                             </div>
                             <div class="flex items-center gap-4 py-2">
                                 <div class="flex-1 h-px bg-gray-200"></div>
@@ -702,10 +710,10 @@
                             </div>
                             <!-- Desain tombol modern dengan bayangan halus, transisi transparan, dan gradient segar -->
                             <button id="btn-scan" class="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-sky-200 hover:shadow-sky-300 transition-all duration-300 active:scale-[0.99]">
-                                <i class="fas fa-camera"></i> <span id="scan-btn-text">Aktifkan Kamera Scan Barcode</span>
+                                <i class="fas fa-camera"></i> <span id="scan-btn-text">Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)</span>
                             </button>
                             <!-- Kontainer kamera dengan pengaturan flex, border radius, serta aspek rasio responsif -->
-                            <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-md mx-auto shadow-inner relative" style="min-height: 250px;"></div>
+                            <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-lg mx-auto shadow-inner relative" style="min-height: 250px;"></div>
                         </div>
                     </div>
 
@@ -719,30 +727,40 @@
             const resultDiv = document.getElementById('search-result');
             const scanBtnText = document.getElementById('scan-btn-text');
 
+            // Logika pencarian yang disempurnakan: Tampilkan daftar jika banyak kecocokan
             input.oninput = (e) => {
-                const term = e.target.value.toLowerCase();
+                const term = e.target.value.toLowerCase().trim();
                 if (term.length < 2) {
                     resultDiv.classList.add('hidden');
                     return;
                 }
-                const found = assets.find(a => a.nama.toLowerCase().includes(term) || (a.kode && a.kode.toLowerCase().includes(term)));
-                if (found) {
-                    showAssetDetail(found);
+                
+                // Cari diseluruh properti yang memungkinkan
+                const foundAssets = assets.filter(a => 
+                    a.nama.toLowerCase().includes(term) || 
+                    (a.kode && a.kode.toLowerCase().includes(term)) ||
+                    a.merk.toLowerCase().includes(term) ||
+                    a.lokasi.toLowerCase().includes(term)
+                );
+
+                if (foundAssets.length === 1) {
+                    showAssetDetail(foundAssets[0]);
+                } else if (foundAssets.length > 1) {
+                    window.showAssetList(foundAssets);
                 } else {
-                    resultDiv.classList.add('hidden');
+                    resultDiv.innerHTML = `<div class="p-8 text-center text-gray-500 bg-white rounded-[2rem] shadow-sm border border-gray-100">Tidak ada barang ditemukan untuk kata kunci "<span class="font-bold text-gray-700">${term}</span>"</div>`;
+                    resultDiv.classList.remove('hidden');
                 }
             };
 
             document.getElementById('btn-scan').onclick = async () => {
                 const reader = document.getElementById('reader');
                 
-                // Deteksi dini secure context (Wajib HTTPS untuk kamera smartphone)
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     showToast("Error: Gagal mengakses kamera. Pastikan aplikasi dibuka lewat protokol HTTPS aman.", "error");
                     return;
                 }
 
-                // Jika scanner aktif, hentikan kamera dan bersihkan resource sepenuhnya
                 if (window.activeScanner) {
                     scanBtnText.innerText = "Menonaktifkan Kamera...";
                     try {
@@ -757,66 +775,76 @@
                                 window.activeScanner.clear();
                             }
                         } catch(e){}
-                        window.activeScanner = null; // Paksa reset objek agar bersih dan bisa diinstansiasi ulang secara segar
+                        window.activeScanner = null;
                         reader.innerHTML = "";
                         reader.classList.add('hidden');
-                        scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                        scanBtnText.innerText = "Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)";
                     }
                     return;
                 }
 
-                // Menyalakan kamera:
-                // Tampilkan container/div "reader" terlebih dahulu ke DOM 
-                // agar memiliki dimensi fisik lebar dan tinggi sebelum Html5Qrcode diinstansiasi.
                 reader.classList.remove('hidden');
-                reader.innerHTML = ""; // Bersihkan sisa render elemen video lama agar fresh
+                reader.innerHTML = ""; 
                 scanBtnText.innerText = "Menyiapkan Layar Kamera...";
                 
-                // Jeda waktu asinkronus ditingkatkan (300 milidetik) agar browser mobile selesai merender elemen HTML secara visual
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // Pastikan element reader benar-benar ada di DOM secara real-time sebelum inisialisasi
                 const verifiedReader = document.getElementById('reader');
                 if (!verifiedReader) {
                     showToast("Error: Elemen penampil kamera tidak ditemukan di layar.", "error");
-                    scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                    scanBtnText.innerText = "Aktifkan Kamera";
                     return;
                 }
 
-                // Inisialisasi library scanner baru setelah elemen ter-render sempurna
                 try {
-                    window.activeScanner = new Html5Qrcode("reader");
+                    // Peningkatan pada konfigurasi format dukungan
+                    window.activeScanner = new Html5Qrcode("reader", { 
+                        formatsToSupport: [ 
+                            Html5QrcodeSupportedFormats.QR_CODE, 
+                            Html5QrcodeSupportedFormats.CODE_128, 
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.CODE_39
+                        ] 
+                    });
                 } catch (initErr) {
                     console.error("Gagal instansiasi Html5Qrcode:", initErr);
-                    showToast("Gagal memuat sistem kamera. Coba klik kembali tombol Aktifkan.", "error");
+                    showToast("Gagal memuat sistem kamera.", "error");
                     reader.classList.add('hidden');
-                    scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                    scanBtnText.innerText = "Aktifkan Kamera";
                     window.activeScanner = null;
                     return;
                 }
 
                 scanBtnText.innerText = "Menghubungkan Kamera...";
 
-                // Box bidik horizontal melandai untuk mendeteksi Barcode 1D & QR Code dengan nyaman di smartphone
-                const dynamicQrBox = (viewfinderWidth, viewfinderHeight) => {
-                    const width = Math.floor(viewfinderWidth * 0.85);
-                    const height = Math.floor(viewfinderHeight * 0.45); 
-                    return { width: width, height: height };
+                // Perbaikan Konfigurasi Landscape / Portrait Auto-detect
+                const config = {
+                    fps: 15,
+                    qrbox: function(viewfinderWidth, viewfinderHeight) {
+                        // Membuat kotak scan (bidikan) fleksibel yang menyesuaikan orientasi layar HP
+                        // Kotak lebih melebar (width > height) cocok untuk scan 1D (Barcode biasa) dalam posisi apapun.
+                        return {
+                            width: Math.floor(viewfinderWidth * 0.9), 
+                            height: Math.floor(viewfinderHeight * 0.45)
+                        };
+                    }
+                    // aspectRatio sengaja DIHILANGKAN agar library menyesuaikan dengan natural rotasi HP (Landscape/Portrait)
                 };
 
                 const scanSuccessCallback = (decodedText) => {
                     input.value = decodedText;
-                    const found = assets.find(a => a.kode === decodedText);
+                    // Pada saat scan, kita lebih berharap menemukan 1 identitas spesifik
+                    const found = assets.find(a => a.kode === decodedText || a.nama.toLowerCase() === decodedText.toLowerCase());
+                    
                     if (found) {
                         showAssetDetail(found);
-                        // Hentikan dan tutup kamera langsung setelah barcode terdeteksi
                         if (window.activeScanner) {
                             window.activeScanner.stop().then(() => {
                                 window.activeScanner.clear();
                                 window.activeScanner = null;
                                 reader.innerHTML = "";
                                 reader.classList.add('hidden');
-                                scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                                scanBtnText.innerText = "Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)";
                             }).catch(err => console.error("Gagal stop setelah scan sukses:", err));
                         }
                     } else {
@@ -824,13 +852,6 @@
                     }
                 };
 
-                const config = {
-                    fps: 15,
-                    qrbox: dynamicQrBox,
-                    aspectRatio: 1.777778
-                };
-
-                // PROSEDUR UTAMA: Memanggil direct start facingMode "environment" terlebih dahulu
                 try {
                     await window.activeScanner.start(
                         { facingMode: "environment" }, 
@@ -842,11 +863,9 @@
                 } catch (directErr) {
                     console.warn("Metode direct start gagal, menjalankan prosedur fallback getCameras...", directErr);
                     
-                    // PROSEDUR FALLBACK: Dijalankan jika smartphone membutuhkan ID kamera spesifik
                     try {
                         const devices = await Html5Qrcode.getCameras();
                         if (devices && devices.length > 0) {
-                            // Filter kamera belakang utama berdasarkan kata kunci label yang komprehensif
                             let selectedCamera = devices.find(device => {
                                 const lbl = device.label.toLowerCase();
                                 return lbl.includes('back') || 
@@ -857,7 +876,6 @@
                                        lbl.includes('0, facing back');
                             });
 
-                            // Jika tidak ditemukan label spesifik, pilih kamera paling belakang (indeks terakhir)
                             const cameraId = selectedCamera ? selectedCamera.id : devices[devices.length - 1].id;
                             
                             await window.activeScanner.start(
@@ -880,10 +898,49 @@
                         }
                         reader.innerHTML = "";
                         reader.classList.add('hidden');
-                        scanBtnText.innerText = "Aktifkan Kamera Scan Barcode";
+                        scanBtnText.innerText = "Aktifkan Kamera";
                     }
                 }
             };
+        };
+
+        window.showAssetList = (assetList) => {
+            const resultDiv = document.getElementById('search-result');
+            resultDiv.classList.remove('hidden');
+
+            resultDiv.innerHTML = `
+                <div class="card-glass p-6 md:p-8 rounded-[2rem]">
+                    <h4 class="font-bold text-gray-800 mb-4 pb-4 border-b border-gray-100 flex items-center justify-between">
+                        <span>Hasil Pencarian (${assetList.length} ditemukan)</span>
+                        <span class="text-xs text-sky-600 font-normal">Klik item untuk detail</span>
+                    </h4>
+                    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                        ${assetList.map(a => `
+                            <div onclick="showAssetDetailObject('${a.id}')" class="flex items-center gap-4 p-4 bg-white/50 hover:bg-sky-50 rounded-2xl cursor-pointer transition border border-gray-100 hover:border-sky-300 shadow-sm">
+                                <div class="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden shrink-0 shadow-inner">
+                                    ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-400"><i class="fas fa-image"></i></div>`}
+                                </div>
+                                <div class="flex-1 overflow-hidden">
+                                    <h5 class="font-bold text-gray-800 text-sm truncate">${a.nama}</h5>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-ellipsis overflow-hidden whitespace-nowrap max-w-[100px]">${a.merk}</span>
+                                        <span class="text-[10px] text-sky-700 font-bold bg-sky-50 px-2 py-0.5 rounded"><i class="fas fa-map-marker-alt mr-1"></i>${a.lokasi}</span>
+                                    </div>
+                                </div>
+                                <div class="text-right flex flex-col items-end gap-1">
+                                    <span class="px-2.5 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-lg shadow-sm border border-green-200">${a.jumlah} Stok</span>
+                                    ${a.kode ? `<span class="text-[9px] font-mono text-gray-400 border px-1 rounded">${a.kode}</span>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        };
+
+        window.showAssetDetailObject = (id) => {
+            const asset = assets.find(a => a.id === id);
+            if (asset) showAssetDetail(asset);
         };
 
         const showAssetDetail = (asset) => {
@@ -1067,11 +1124,23 @@
             container.innerHTML = `
                 <div class="max-w-2xl mx-auto">
                     <form id="form-mutasi" class="card-glass p-8 rounded-[2rem] space-y-6">
+                        
+                        <!-- Penambahan Fitur: Filter Ruangan Asal -->
+                        <div class="space-y-2 mb-2 p-4 bg-sky-50/50 rounded-2xl border border-sky-100">
+                            <label class="text-sm font-bold text-sky-900 flex items-center gap-2">
+                                <i class="fas fa-filter text-sky-500"></i> Filter Ruangan Asal (Opsional)
+                            </label>
+                            <select id="mutasi-filter-ruangan" class="w-full p-3 bg-white border border-sky-100 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-sm shadow-sm transition">
+                                <option value="">-- Semua Ruangan --</option>
+                                ${rooms.map(r => `<option value="${r.nama}">${r.nama}</option>`).join('')}
+                            </select>
+                            <p class="text-[10px] text-gray-500 mt-1">Pilih ruangan terlebih dahulu agar daftar pencarian barang lebih spesifik dan mudah ditemukan.</p>
+                        </div>
+
                         <div class="space-y-2">
-                            <label class="text-sm font-bold text-gray-700">Pilih Barang yang Akan Dimutasi</label>
-                            <select id="mutasi-asset-id" required class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">
-                                <option value="">Cari Barang...</option>
-                                ${assets.map(a => `<option value="${a.id}" ${editData?.assetId === a.id ? 'selected' : ''}>${a.nama} (${a.merk}) - Lokasi: ${a.lokasi} - Stok: ${a.jumlah}</option>`).join('')}
+                            <label class="text-sm font-bold text-gray-700">Pilih Barang yang Akan Dimutasi <span class="text-red-500">*</span></label>
+                            <select id="mutasi-asset-id" required class="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none shadow-inner">
+                                <option value="">Memuat data barang...</option>
                             </select>
                         </div>
                         
@@ -1115,6 +1184,31 @@
                 </div>
             `;
 
+            // Logika Update Dropdown berdasarkan Filter Ruangan
+            const filterRuangan = document.getElementById('mutasi-filter-ruangan');
+            const assetSelect = document.getElementById('mutasi-asset-id');
+
+            const updateAssetOptions = () => {
+                const selectedRoom = filterRuangan.value;
+                const filteredAssets = selectedRoom ? assets.filter(a => a.lokasi === selectedRoom) : assets;
+
+                if (filteredAssets.length === 0) {
+                    assetSelect.innerHTML = `<option value="">-- Tidak ada aset tersedia di ruangan ini --</option>`;
+                } else {
+                    assetSelect.innerHTML = `<option value="">-- Pilih Barang di ${selectedRoom ? 'Ruangan '+selectedRoom : 'Semua Lokasi'} --</option>` +
+                        filteredAssets.map(a => `<option value="${a.id}" ${editData?.assetId === a.id ? 'selected' : ''}>${a.nama} (${a.merk}) | Stok: ${a.jumlah} | Lokasi: ${a.lokasi}</option>`).join('');
+                }
+            };
+
+            // Event listener saat filter ruangan dirubah
+            filterRuangan.addEventListener('change', updateAssetOptions);
+            
+            // Set default value jika mode edit
+            if (editData && editData.dari) {
+                filterRuangan.value = editData.dari;
+            }
+            updateAssetOptions(); // Panggilan pertama kali
+
             if (!editData) {
                 document.getElementById('mutasi-tanggal').value = new Date().toISOString().split('T')[0];
             }
@@ -1130,6 +1224,8 @@
                 if (!user) return;
 
                 const assetId = document.getElementById('mutasi-asset-id').value;
+                if(!assetId) return showToast("Harap pilih barang terlebih dahulu!", "warning");
+                
                 const asset = assets.find(a => a.id === assetId);
                 const jumlah = parseInt(document.getElementById('mutasi-jumlah').value);
                 const tipe = document.getElementById('mutasi-tipe').value;
@@ -1147,7 +1243,6 @@
 
                 try {
                     if (editData) {
-                        // Update existing mutation record
                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mutations', editData.id), {
                             assetId,
                             namaBarang: asset.nama,
@@ -1162,7 +1257,6 @@
                         });
                         showToast("Catatan mutasi berhasil diperbarui!");
                     } else {
-                        // Update Original Asset Stock
                         const newOldStock = asset.jumlah - jumlah;
                         if (newOldStock === 0) {
                             if (tipe === 'Mutasi') {
@@ -1194,7 +1288,6 @@
                             }
                         }
 
-                        // Record Mutation
                         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), {
                             assetId: asset.id,
                             namaBarang: asset.nama,
@@ -1485,7 +1578,6 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
 
-            // --- KOP SURAT RSU DADI KELUARGA (BLUE TIMES NEW ROMAN) ---
             doc.setFontSize(22);
             doc.setTextColor(0, 51, 204); 
             doc.setFont("times", "bold");
@@ -1497,14 +1589,12 @@
             doc.text("Jl. Sultan Agung No. 8A, Teluk, Purwokerto Selatan, Kab. Banyumas", 105, 23, { align: 'center' });
             doc.text("Telp: (0281) 6844005 • Email: info@rsudadikeluarga.co.id • Purwokerto 53145", 105, 27, { align: 'center' });
             
-            // Double divider line in blue color
             doc.setDrawColor(0, 51, 204);
             doc.setLineWidth(0.8);
             doc.line(15, 30, 195, 30);
             doc.setLineWidth(0.2);
             doc.line(15, 31.2, 195, 31.2);
 
-            // --- JUDUL DOKUMEN ---
             doc.setFontSize(14);
             doc.setTextColor(0);
             doc.setFont("helvetica", "bold");
@@ -1516,12 +1606,10 @@
             const randomDocNo = Math.floor(Math.random() * 800) + 100;
             doc.text(`Nomor: BA-RSDK/UM-RT/${rawYear}/${randomDocNo}`, 105, 47, { align: 'center' });
 
-            // --- KATA PENGANTAR ---
             doc.setFontSize(10);
             doc.text("Yang bertanda tangan di bawah ini menerangkan dengan sebenarnya mengenai kondisi kerusakan fisik", 15, 58);
             doc.text("aset rumah sakit non-medis yang tertera di bawah ini:", 15, 63);
 
-            // --- TABEL DETAIL BARANG ---
             const daysArr = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
             const monthsArr = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
             
@@ -1562,16 +1650,13 @@
                 }
             });
 
-            // --- KATA PENUTUP ---
             const finalTableY = doc.lastAutoTable.finalY;
             doc.setFontSize(10);
             doc.text("Demikian Berita Acara Kerusakan ini dibuat dengan sebenar-benarnya untuk digunakan sebagai landasan", 15, finalTableY + 12);
             doc.text("tindak lanjut perbaikan atau pengajuan penggantian aset sesuai regulasi sarana prasarana RSU Dadi Keluarga.", 15, finalTableY + 17);
 
-            // --- TANDA TANGAN (SIGNATURE LAYOUT) ---
             const sigY = finalTableY + 32;
 
-            // Header Signatures
             doc.setFont("helvetica", "normal");
             doc.text("Mengetahui,", 105, sigY, { align: 'center' });
             
@@ -1589,7 +1674,6 @@
             doc.setFont("helvetica", "bold");
             doc.text("Manager Umum", 170, sigY + 11, { align: 'center' });
 
-            // Space for hand-writing
             const signLinesY = sigY + 38;
             doc.setFont("helvetica", "bold");
             doc.text(`( ${data.signKepala} )`, 35, signLinesY, { align: 'center' });
@@ -1600,12 +1684,10 @@
             showToast("Berita Acara Kerusakan berhasil dicetak!");
         };
 
-        // --- Export Mutations History to professional PDF with Hospital Kop ---
         window.exportMutationsToPDF = () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
 
-            // --- KOP SURAT RSU DADI KELUARGA (BLUE TIMES NEW ROMAN) ---
             doc.setFontSize(22);
             doc.setTextColor(0, 51, 204); 
             doc.setFont("times", "bold");
@@ -1617,14 +1699,12 @@
             doc.text("Jl. Sultan Agung No. 8A, Teluk, Purwokerto Selatan, Kab. Banyumas", 105, 23, { align: 'center' });
             doc.text("Telp: (0281) 6844005 • Email: info@rsudadikeluarga.co.id • Purwokerto 53145", 105, 27, { align: 'center' });
             
-            // Double divider line in blue color
             doc.setDrawColor(0, 51, 204);
             doc.setLineWidth(0.8);
             doc.line(15, 30, 195, 30);
             doc.setLineWidth(0.2);
             doc.line(15, 31.2, 195, 31.2);
 
-            // --- JUDUL LAPORAN ---
             doc.setFontSize(14);
             doc.setTextColor(0);
             doc.setFont("helvetica", "bold");
@@ -1634,7 +1714,6 @@
             doc.setFont("helvetica", "normal");
             doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')} • Bagian Rumah Tangga`, 15, 47);
 
-            // --- DATA TABLE (SKY BLUE FILLED HEADER) ---
             const tableRows = mutations.map((m, idx) => {
                 const dateStr = m.tanggalMutasi ? new Date(m.tanggalMutasi).toLocaleDateString('id-ID') : new Date(m.createdAt?.seconds * 1000).toLocaleDateString('id-ID');
                 const movementStr = m.tipe === 'Mutasi' ? `${m.dari} -> ${m.ke}` : m.dari;
@@ -1667,7 +1746,6 @@
                 }
             });
 
-            // --- SIGNATURES ---
             const finalY = doc.lastAutoTable.finalY + 15;
             doc.setFontSize(9);
             doc.text("Purwokerto, " + new Date().toLocaleDateString('id-ID'), 140, finalY);
@@ -1710,8 +1788,6 @@
                     </div>
                 </div>
             `;
-
-            document.getElementById('excel-input').onchange = (e) => handleImport(e);
         };
 
         const renderMasterRuangan = (container) => {
@@ -1754,146 +1830,23 @@
             const name = document.getElementById('master-room-name').value;
             if (!name) return;
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { nama: name });
-            document.getElementById('master-room-name').value = "";
-            showToast("Ruangan berhasil ditambahkan");
+            showToast("Ruangan ditambahkan");
+            renderMasterRuangan(document.getElementById('content-container'));
         };
 
         window.deleteRoomConfirm = (id) => {
-            customConfirm(
-                "Hapus Ruangan", 
-                "Hapus ruangan ini? Aset yang berada di ruangan ini tidak akan terhapus namun lokasinya akan menjadi tidak valid.", 
-                async () => {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', id));
-                    showToast("Ruangan dihapus");
-                }, 
-                "danger"
-            );
-        };
-
-        window.exportToExcel = () => {
-            const worksheet = XLSX.utils.json_to_sheet(assets.map(({id, foto, createdAt, updatedAt, ...rest}) => rest));
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Aset Rumah Sakit");
-            XLSX.writeFile(workbook, `SIMARS_Export_${new Date().toLocaleDateString()}.xlsx`);
-        };
-
-        window.downloadTemplate = () => {
-            const data = [{
-                nama: "Contoh Nama Alat",
-                merk: "Merk/Tipe",
-                kode: "KodeSN123",
-                tanggal: "YYYY-MM-DD",
-                jumlah: 1,
-                harga: 1000000,
-                lokasi: rooms[0]?.nama || "Pilih Ruangan",
-                vendor: "Nama Supplier"
-            }];
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Template");
-            XLSX.writeFile(wb, "Template_SIMARS.xlsx");
-        };
-
-        const handleImport = (e) => {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = async (evt) => {
-                const data = evt.target.result;
-                const workbook = XLSX.read(data, { type: 'binary' });
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(sheet);
-                
-                showToast(`Memproses ${rows.length} data...`);
-                for (const row of rows) {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), {
-                        ...row,
-                        foto: "",
-                        createdAt: serverTimestamp()
-                    });
-                }
-                showToast("Import Berhasil!");
-                switchTab('database');
-            };
-            reader.readAsBinaryString(file);
-        };
-
-        const exportToPDF = (roomName) => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
-            const data = assets.filter(a => a.lokasi === roomName);
-            
-            // Header Rumah Sakit (KOP)
-            doc.setFontSize(25);
-            doc.setTextColor(2, 132, 199); // Brand Sky Blue
-            doc.text("RSU DADI KELUARGA PURWOKERTO", 105, 15, { align: 'center' });
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text("Jl.Sultan Agung NO:8A Teluk-Purwokerto Selatan • Telp: (021) 555-00000", 105, 20, { align: 'center' });
-            doc.line(20, 25, 190, 25);
-
-            // Judul Dokumen
-            doc.setFontSize(14);
-            doc.setTextColor(0);
-            doc.text(`LAPORAN INVENTARIS ASET: ${roomName.toUpperCase()}`, 20, 35);
-            doc.setFontSize(9);
-            doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 20, 40);
-
-            // Tabel
-            const tableData = data.map((a, i) => [
-                i + 1, 
-                a.nama, 
-                a.merk, 
-                a.kode || '-', 
-                a.jumlah, 
-                `Rp ${parseInt(a.harga).toLocaleString()}`
-            ]);
-
-            doc.autoTable({
-                startY: 45,
-                head: [['No', 'Nama Barang', 'Merk/Tipe', 'Kode Inventaris', 'Qty', 'Harga Satuan']],
-                body: tableData,
-                theme: 'striped',
-                headStyles: { fillColor: [2, 132, 199] }, // Sky Blue
-                styles: { fontSize: 8 }
+            customConfirm("Hapus Ruangan", "Yakin ingin menghapus ruangan ini?", async () => {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', id));
+                showToast("Ruangan dihapus");
             });
-
-            // Tanda Tangan
-            const finalY = doc.lastAutoTable.finalY + 20;
-            doc.text("Pencatat Barang,", 30, finalY);
-            doc.text("( ____________________ )", 30, finalY + 25);
-            
-            doc.text("Penanggung Jawab Ruangan,", 130, finalY);
-            doc.text("( ____________________ )", 130, finalY + 25);
-
-            doc.save(`Aset_${roomName}_${Date.now()}.pdf`);
         };
 
-        // --- Utility ---
-        window.closeModal = () => {
-            document.getElementById('modal-overlay').style.display = 'none';
-        };
-
-        const showToast = (msg, type = "success") => {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-8 left-1/2 -translate-x-1/2 px-8 py-4 rounded-2xl text-white font-bold shadow-2xl z-[200] transition transform translate-y-10 opacity-0 ${type === 'success' ? 'bg-sky-600' : type === 'error' ? 'bg-red-600' : 'bg-amber-600'}`;
-            toast.innerText = msg;
-            document.body.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.classList.remove('translate-y-10', 'opacity-0');
-            }, 100);
-            
-            setTimeout(() => {
-                toast.classList.add('translate-y-10', 'opacity-0');
-                setTimeout(() => toast.remove(), 500);
-            }, 3000);
-        };
-
-        // Init
-        document.getElementById('current-date').innerText = new Date().toLocaleString('id-ID');
-        initAuth();
-        switchTab('dashboard');
-
+        const updateDate = () => {
+            const now = new Date();
+            document.getElementById('current-date').innerText = now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        setInterval(updateDate, 1000);
+        updateDate();
     </script>
 </body>
 </html>
