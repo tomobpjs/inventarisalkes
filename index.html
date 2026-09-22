@@ -148,6 +148,9 @@
                 <button onclick="switchTab('db-mutasi')" id="nav-db-mutasi" class="w-full flex items-center gap-3 p-3 rounded-xl transition text-white hover:bg-white/10">
                     <i class="fas fa-history w-5"></i> Riwayat Mutasi
                 </button>
+                <button onclick="switchTab('lacak-barang')" id="nav-lacak-barang" class="w-full flex items-center gap-3 p-3 rounded-xl transition text-white hover:bg-white/10">
+                    <i class="fas fa-search-location w-5"></i> Lacak Barang
+                </button>
                 <button onclick="switchTab('berita-acara')" id="nav-berita-acara" class="w-full flex items-center gap-3 p-3 rounded-xl transition text-white hover:bg-white/10">
                     <i class="fas fa-file-signature w-5"></i> BA Kerusakan
                 </button>
@@ -250,7 +253,7 @@
 
         // --- Custom Toast Setup ---
         window.showToast = (message, type = "success") => {
-            alert(message); // Fallback for simplicty, can be upgraded to toast div
+            alert(message);
         };
 
         // --- Custom Confirmation Dialog Utility ---
@@ -359,6 +362,7 @@
                 'ruangan': 'Manajemen Aset Ruangan',
                 'input-mutasi': 'Mutasi & Perubahan Status',
                 'db-mutasi': 'Riwayat Mutasi Aset',
+                'lacak-barang': 'Lacak Riwayat Barang',
                 'berita-acara': 'Berita Acara Kerusakan Aset',
                 'import-export': 'Import & Export Excel',
                 'master-ruangan': 'Master Ruangan'
@@ -380,6 +384,7 @@
                 case 'ruangan': renderRuangan(container); break;
                 case 'input-mutasi': renderInputMutasi(container); break;
                 case 'db-mutasi': renderDBMutasi(container); break;
+                case 'lacak-barang': renderLacakBarang(container); break;
                 case 'berita-acara': renderBeritaAcara(container); break;
                 case 'import-export': renderImportExport(container); break;
                 case 'master-ruangan': renderMasterRuangan(container); break;
@@ -708,18 +713,14 @@
                                 <span class="text-xs text-gray-400 font-bold uppercase">ATAU</span>
                                 <div class="flex-1 h-px bg-gray-200"></div>
                             </div>
-                            <!-- Desain tombol modern dengan bayangan halus, transisi transparan, dan gradient segar -->
                             <button id="btn-scan" class="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-sky-200 hover:shadow-sky-300 transition-all duration-300 active:scale-[0.99]">
                                 <i class="fas fa-camera"></i> <span id="scan-btn-text">Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)</span>
                             </button>
-                            <!-- Kontainer kamera dengan pengaturan flex, border radius, serta aspek rasio responsif -->
                             <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-lg mx-auto shadow-inner relative" style="min-height: 250px;"></div>
                         </div>
                     </div>
 
-                    <div id="search-result" class="hidden">
-                        <!-- Hasil pencarian akan muncul di sini -->
-                    </div>
+                    <div id="search-result" class="hidden"></div>
                 </div>
             `;
 
@@ -727,7 +728,6 @@
             const resultDiv = document.getElementById('search-result');
             const scanBtnText = document.getElementById('scan-btn-text');
 
-            // Logika pencarian yang disempurnakan: Tampilkan daftar jika banyak kecocokan
             input.oninput = (e) => {
                 const term = e.target.value.toLowerCase().trim();
                 if (term.length < 2) {
@@ -735,7 +735,6 @@
                     return;
                 }
                 
-                // Cari diseluruh properti yang memungkinkan
                 const foundAssets = assets.filter(a => 
                     a.nama.toLowerCase().includes(term) || 
                     (a.kode && a.kode.toLowerCase().includes(term)) ||
@@ -797,7 +796,6 @@
                 }
 
                 try {
-                    // Peningkatan pada konfigurasi format dukungan
                     window.activeScanner = new Html5Qrcode("reader", { 
                         formatsToSupport: [ 
                             Html5QrcodeSupportedFormats.QR_CODE, 
@@ -817,23 +815,18 @@
 
                 scanBtnText.innerText = "Menghubungkan Kamera...";
 
-                // Perbaikan Konfigurasi Landscape / Portrait Auto-detect
                 const config = {
                     fps: 15,
                     qrbox: function(viewfinderWidth, viewfinderHeight) {
-                        // Membuat kotak scan (bidikan) fleksibel yang menyesuaikan orientasi layar HP
-                        // Kotak lebih melebar (width > height) cocok untuk scan 1D (Barcode biasa) dalam posisi apapun.
                         return {
                             width: Math.floor(viewfinderWidth * 0.9), 
                             height: Math.floor(viewfinderHeight * 0.45)
                         };
                     }
-                    // aspectRatio sengaja DIHILANGKAN agar library menyesuaikan dengan natural rotasi HP (Landscape/Portrait)
                 };
 
                 const scanSuccessCallback = (decodedText) => {
                     input.value = decodedText;
-                    // Pada saat scan, kita lebih berharap menemukan 1 identitas spesifik
                     const found = assets.find(a => a.kode === decodedText || a.nama.toLowerCase() === decodedText.toLowerCase());
                     
                     if (found) {
@@ -857,12 +850,10 @@
                         { facingMode: "environment" }, 
                         config, 
                         scanSuccessCallback,
-                        () => { /* Callback error frame biasa dibiarkan kosong */ }
+                        () => {}
                     );
                     scanBtnText.innerText = "Matikan Kamera Scan";
                 } catch (directErr) {
-                    console.warn("Metode direct start gagal, menjalankan prosedur fallback getCameras...", directErr);
-                    
                     try {
                         const devices = await Html5Qrcode.getCameras();
                         if (devices && devices.length > 0) {
@@ -882,16 +873,14 @@
                                 cameraId, 
                                 config, 
                                 scanSuccessCallback,
-                                () => { /* Muted frame error */ }
+                                () => {}
                             );
                             scanBtnText.innerText = "Matikan Kamera Scan";
                         } else {
                             throw new Error("Tidak ada kamera terdeteksi di perangkat.");
                         }
                     } catch (fallbackErr) {
-                        console.error("Semua metode inisialisasi kamera gagal:", fallbackErr);
                         showToast("Izin kamera ditolak atau kamera tidak ditemukan pada browser smartphone Anda.", "error");
-                        
                         if (window.activeScanner) {
                             try { window.activeScanner.clear(); } catch(e){}
                             window.activeScanner = null;
@@ -1028,9 +1017,7 @@
                     </div>
                 </div>
 
-                <div id="room-asset-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Assets filtered by room -->
-                </div>
+                <div id="room-asset-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
             `;
 
             const filter = document.getElementById('filter-ruangan');
@@ -1065,6 +1052,130 @@
                 const room = filter.value;
                 if (!room) return showToast("Pilih ruangan terlebih dahulu", "warning");
                 exportToPDF(room);
+            };
+        };
+
+        // ==========================================
+        // FITUR BARU: MENU "LACAK BARANG"
+        // ==========================================
+        const renderLacakBarang = (container) => {
+            container.innerHTML = `
+                <div class="max-w-5xl mx-auto space-y-8">
+                    <div class="card-glass p-8 rounded-[2rem] space-y-6">
+                        <h4 class="font-bold text-gray-800 text-lg flex items-center gap-2">
+                            <i class="fas fa-search-location text-sky-600"></i> Pelacakan Riwayat Barang (Dari Pembelian ke Mutasi)
+                        </h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="text-sm font-bold text-gray-700">Filter Nama Ruangan</label>
+                                <select id="lacak-filter-ruangan" class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">
+                                    <option value="">-- Semua Ruangan --</option>
+                                    ${rooms.map(r => `<option value="${r.nama}">${r.nama}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-bold text-gray-700">Filter Nama Alat / Barang <span class="text-red-500">*</span></label>
+                                <select id="lacak-filter-alat" class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">
+                                    <option value="">-- Pilih Alat / Barang --</option>
+                                    ${assets.map(a => `<option value="${a.id}">${a.nama} (${a.merk}) - Lokasi: ${a.lokasi}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <button id="btn-lacak-proses" class="w-full bg-sky-600 text-white font-bold py-4 rounded-2xl hover:bg-sky-700 transition shadow-lg shadow-sky-200">
+                            Tampilkan Riwayat Pelacakan
+                        </button>
+                    </div>
+
+                    <div id="lacak-result-container" class="hidden">
+                        <!-- Hasil detail pelacakan akan muncul di sini -->
+                    </div>
+                </div>
+            `;
+
+            const filterRuangan = document.getElementById('lacak-filter-ruangan');
+            const filterAlat = document.getElementById('lacak-filter-alat');
+            const btnProses = document.getElementById('btn-lacak-proses');
+            const resultContainer = document.getElementById('lacak-result-container');
+
+            filterRuangan.onchange = () => {
+                const selectedRoom = filterRuangan.value;
+                const filteredAssets = selectedRoom ? assets.filter(a => a.lokasi === selectedRoom) : assets;
+                filterAlat.innerHTML = `<option value="">-- Pilih Alat / Barang --</option>` +
+                    filteredAssets.map(a => `<option value="${a.id}">${a.nama} (${a.merk}) - Lokasi: ${a.lokasi}</option>`).join('');
+            };
+
+            btnProses.onclick = () => {
+                const assetId = filterAlat.value;
+                if (!assetId) {
+                    showToast("Silakan pilih nama alat terlebih dahulu!", "warning");
+                    return;
+                }
+
+                const asset = assets.find(a => a.id === assetId);
+                if (!asset) return;
+
+                const itemMutations = mutations.filter(m => m.assetId === asset.id);
+
+                resultContainer.classList.remove('hidden');
+                resultContainer.innerHTML = `
+                    <div class="card-glass rounded-[2rem] p-8 space-y-8 shadow-xl">
+                        <div class="flex flex-col md:flex-row gap-6 items-center border-b pb-6">
+                            <div class="w-24 h-24 rounded-2xl bg-gray-100 overflow-hidden shrink-0 shadow-inner">
+                                ${asset.foto ? `<img src="${asset.foto}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-300 text-3xl"><i class="fas fa-image"></i></div>`}
+                            </div>
+                            <div class="flex-1 space-y-1 text-center md:text-left">
+                                <span class="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-xs font-bold">${asset.lokasi}</span>
+                                <h3 class="text-2xl font-bold text-gray-800 mt-1">${asset.nama}</h3>
+                                <p class="text-sm text-sky-600 font-medium">Merk/Tipe: ${asset.merk} | Kode SN: ${asset.kode || '-'}</p>
+                            </div>
+                            <div class="text-center md:text-right">
+                                <p class="text-xs text-gray-400 uppercase font-bold">Stok Saat Ini</p>
+                                <p class="text-2xl font-bold text-sky-900">${asset.jumlah} Unit</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-base mb-6 flex items-center gap-2">
+                                <i class="fas fa-history text-sky-600"></i> Riwayat Linimasa (Dari Pembelian Sampai Mutasi)
+                            </h4>
+                            <div class="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-sky-200">
+                                
+                                <!-- Titik 1: Pembelian Awal -->
+                                <div class="relative bg-white/90 p-5 rounded-2xl shadow-sm border border-sky-100">
+                                    <div class="absolute -left-[31px] top-5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white"></div>
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">Pembelian / Input Awal</span>
+                                            <h5 class="font-bold text-gray-800 text-sm mt-1">Pengadaan Barang dari Supplier</h5>
+                                            <p class="text-xs text-gray-500 mt-1">Vendor/Toko: ${asset.vendor || '-'} | Harga Satuan: Rp ${parseInt(asset.harga || 0).toLocaleString()}</p>
+                                        </div>
+                                        <span class="text-xs font-mono font-bold text-gray-400">${asset.tanggal || 'Tanggal tidak dicatat'}</span>
+                                    </div>
+                                </div>
+
+                                <!-- Titik Berikutnya: Mutasi / Kerusakan / Status -->
+                                ${itemMutations.length === 0 ? `
+                                    <div class="relative bg-white/50 p-4 rounded-2xl text-xs text-gray-400 italic">
+                                        <div class="absolute -left-[31px] top-4 w-4 h-4 rounded-full bg-gray-300 border-2 border-white"></div>
+                                        Belum ada riwayat mutasi atau perubahan status lanjutan untuk barang ini.
+                                    </div>
+                                ` : itemMutations.map(m => `
+                                    <div class="relative bg-white/90 p-5 rounded-2xl shadow-sm border border-sky-100">
+                                        <div class="absolute -left-[31px] top-5 w-4 h-4 rounded-full ${m.tipe === 'Mutasi' ? 'bg-amber-500' : m.tipe === 'Rusak' ? 'bg-red-500' : 'bg-blue-500'} border-2 border-white"></div>
+                                        <div class="flex justify-between items-start">
+                                            <div>
+                                                <span class="px-2.5 py-0.5 ${m.tipe === 'Mutasi' ? 'bg-amber-100 text-amber-700' : m.tipe === 'Rusak' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'} text-xs font-bold rounded-full">${m.tipe}</span>
+                                                <h5 class="font-bold text-gray-800 text-sm mt-1">${m.tipe === 'Mutasi' ? `Mutasi dari ${m.dari} ke ${m.ke}` : `Status: ${m.tipe}`}</h5>
+                                                <p class="text-xs text-gray-600 mt-1">Jumlah: ${m.jumlah} Unit | Keterangan: ${m.keterangan || '-'}</p>
+                                            </div>
+                                            <span class="text-xs font-mono font-bold text-gray-400">${m.tanggalMutasi ? new Date(m.tanggalMutasi).toLocaleDateString('id-ID') : new Date(m.createdAt?.seconds * 1000).toLocaleDateString('id-ID')}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
             };
         };
 
@@ -1124,8 +1235,6 @@
             container.innerHTML = `
                 <div class="max-w-2xl mx-auto">
                     <form id="form-mutasi" class="card-glass p-8 rounded-[2rem] space-y-6">
-                        
-                        <!-- Penambahan Fitur: Filter Ruangan Asal -->
                         <div class="space-y-2 mb-2 p-4 bg-sky-50/50 rounded-2xl border border-sky-100">
                             <label class="text-sm font-bold text-sky-900 flex items-center gap-2">
                                 <i class="fas fa-filter text-sky-500"></i> Filter Ruangan Asal (Opsional)
@@ -1184,7 +1293,6 @@
                 </div>
             `;
 
-            // Logika Update Dropdown berdasarkan Filter Ruangan
             const filterRuangan = document.getElementById('mutasi-filter-ruangan');
             const assetSelect = document.getElementById('mutasi-asset-id');
 
@@ -1200,14 +1308,11 @@
                 }
             };
 
-            // Event listener saat filter ruangan dirubah
             filterRuangan.addEventListener('change', updateAssetOptions);
-            
-            // Set default value jika mode edit
             if (editData && editData.dari) {
                 filterRuangan.value = editData.dari;
             }
-            updateAssetOptions(); // Panggilan pertama kali
+            updateAssetOptions();
 
             if (!editData) {
                 document.getElementById('mutasi-tanggal').value = new Date().toISOString().split('T')[0];
@@ -1415,7 +1520,6 @@
         const renderBeritaAcara = (container) => {
             container.innerHTML = `
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                    <!-- Form Generator -->
                     <div class="lg:col-span-1">
                         <form id="form-ba-rusak" class="card-glass p-6 rounded-[2rem] space-y-4">
                             <h4 class="font-bold text-sky-900 border-b pb-2 mb-4"><i class="fas fa-print mr-2"></i>Buat Berita Acara</h4>
@@ -1424,7 +1528,7 @@
                                 <label class="text-xs font-bold text-gray-700">Pilih Aset Terdaftar <span class="text-red-500">*</span></label>
                                 <select id="ba-asset-id" required class="w-full p-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-sm">
                                     <option value="">-- Pilih Aset --</option>
-                                    ${assets.map(a => `<option value="${a.id}">${a.nama} (${a.merk}) - [Kode: ${a.kode || 'N/A'}]</option>`).join('')}
+                                    ${assets.map(a => `<option value="${a.id}">${a.nama} (${a.merk}) - [Kode:${a.kode || 'N/A'}]</option>`).join('')}
                                 </select>
                             </div>
 
@@ -1470,7 +1574,6 @@
                         </form>
                     </div>
 
-                    <!-- DB Damage Listings -->
                     <div class="lg:col-span-2 space-y-6">
                         <div class="card-glass p-6 rounded-[2rem]">
                             <h4 class="font-bold text-gray-800 mb-4"><i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>Aset Rusak Terdaftar di Database</h4>
@@ -1733,7 +1836,7 @@
                 head: [['No', 'Tanggal', 'Nama Aset', 'Status/Tipe', 'Asal & Tujuan Ruang', 'Qty', 'Keterangan']],
                 body: tableRows,
                 theme: 'striped',
-                headStyles: { fillColor: [2, 132, 199] }, // Brand Sky Blue
+                headStyles: { fillColor: [2, 132, 199] },
                 styles: { fontSize: 8, cellPadding: 3 },
                 columnStyles: {
                     0: { cellWidth: 10 },
