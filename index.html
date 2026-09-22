@@ -148,7 +148,6 @@
                 <button onclick="switchTab('db-mutasi')" id="nav-db-mutasi" class="w-full flex items-center gap-3 p-3 rounded-xl transition text-white hover:bg-white/10">
                     <i class="fas fa-history w-5"></i> Riwayat Mutasi
                 </button>
-                <!-- MENU BARU: Lacak Barang -->
                 <button onclick="switchTab('lacak-barang')" id="nav-lacak-barang" class="w-full flex items-center gap-3 p-3 rounded-xl transition text-white hover:bg-white/10">
                     <i class="fas fa-route w-5"></i> Lacak Barang
                 </button>
@@ -231,7 +230,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = {
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyDZWSrfzuK-LBxmqk696U7QQNc_Rp8gydc",
             authDomain: "inventarisalkes-f3992.firebaseapp.com",
             projectId: "inventarisalkes-f3992",
@@ -252,9 +251,20 @@
         
         window.activeScanner = null;
 
+        // Current date in running text
+        document.getElementById('current-date').innerText = new Date().toLocaleDateString('id-ID', { dateStyle: 'full' });
+
         // --- Custom Toast Setup ---
         window.showToast = (message, type = "success") => {
-            alert(message); // Fallback for simplicty, can be upgraded to toast div
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-6 right-6 z-[120] px-6 py-4 rounded-2xl shadow-2xl text-white font-bold flex items-center gap-3 transition-all transform translate-y-20 opacity-0 ${type === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`;
+            toast.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} text-lg"></i><span>${message}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.classList.remove('translate-y-20', 'opacity-0'); }, 50);
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
         };
 
         // --- Custom Confirmation Dialog Utility ---
@@ -313,6 +323,11 @@
             // Rooms Listener
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), (snapshot) => {
                 rooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (rooms.length === 0) {
+                    // Seed default rooms if empty
+                    const defaultRooms = ['IGD', 'ICU', 'Poli Umum', 'Poli Anak', 'Ruang Rawat Inap', 'Laboratorium', 'Farmasi', 'Radiologi', 'Gudang Utama'];
+                    defaultRooms.forEach(r => addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), { nama: r, createdAt: serverTimestamp() }));
+                }
                 renderCurrentTab();
             }, (err) => console.error("Room Listener Err:", err));
 
@@ -363,7 +378,7 @@
                 'ruangan': 'Manajemen Aset Ruangan',
                 'input-mutasi': 'Mutasi & Perubahan Status',
                 'db-mutasi': 'Riwayat Mutasi Aset',
-                'lacak-barang': 'Pelacakan Riwayat Barang', // MENAMBAH INI
+                'lacak-barang': 'Pelacakan Riwayat Barang',
                 'berita-acara': 'Berita Acara Kerusakan Aset',
                 'import-export': 'Import & Export Excel',
                 'master-ruangan': 'Master Ruangan'
@@ -385,7 +400,7 @@
                 case 'ruangan': renderRuangan(container); break;
                 case 'input-mutasi': renderInputMutasi(container); break;
                 case 'db-mutasi': renderDBMutasi(container); break;
-                case 'lacak-barang': renderLacakBarang(container); break; // MENAMBAH INI
+                case 'lacak-barang': renderLacakBarang(container); break;
                 case 'berita-acara': renderBeritaAcara(container); break;
                 case 'import-export': renderImportExport(container); break;
                 case 'master-ruangan': renderMasterRuangan(container); break;
@@ -430,8 +445,8 @@
                         <div class="space-y-4">
                             ${assets.slice(-5).reverse().map(a => `
                                 <div class="flex items-center gap-4 p-4 rounded-2xl hover:bg-sky-50/50 transition border border-transparent hover:border-sky-100">
-                                    <div class="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600">
-                                        <i class="fas fa-cube"></i>
+                                    <div class="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600 overflow-hidden">
+                                        ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<i class="fas fa-cube"></i>`}
                                     </div>
                                     <div class="flex-1">
                                         <p class="font-bold text-gray-800">${a.nama}</p>
@@ -564,18 +579,14 @@
             document.getElementById('form-aset').onsubmit = async (e) => {
                 e.preventDefault();
                 if (!user) return;
-                
-                const btn = document.getElementById('btn-save');
-                btn.disabled = true;
-                btn.innerHTML = '<div class="loader mx-auto"></div>';
 
-                const data = {
+                const payload = {
                     nama: document.getElementById('asset-nama').value,
                     merk: document.getElementById('asset-merk').value,
-                    kode: document.getElementById('asset-kode').value,
-                    tanggal: document.getElementById('asset-tanggal').value,
-                    jumlah: parseInt(document.getElementById('asset-jumlah').value),
-                    harga: parseInt(document.getElementById('asset-harga').value) || 0,
+                    kode: document.getElementById('asset-kode').value || `AST-${Date.now().toString().slice(-6)}`,
+                    tanggal: document.getElementById('asset-tanggal').value || new Date().toISOString().split('T')[0],
+                    jumlah: parseInt(document.getElementById('asset-jumlah').value) || 1,
+                    harga: parseFloat(document.getElementById('asset-harga').value) || 0,
                     lokasi: document.getElementById('asset-lokasi').value,
                     vendor: document.getElementById('asset-vendor').value,
                     foto: base64Image,
@@ -584,1346 +595,790 @@
 
                 try {
                     if (editData) {
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', editData.id), data);
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', editData.id), payload);
+                        showToast("Aset berhasil diperbarui!");
+                        switchTab('database');
                     } else {
-                        data.createdAt = serverTimestamp();
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), data);
+                        payload.createdAt = serverTimestamp();
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), payload);
+                        
+                        // Catat ke mutasi / log awal
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), {
+                            namaBarang: payload.nama,
+                            kodeBarang: payload.kode,
+                            tipe: 'Input Awal',
+                            dari: 'Vendor / Pembelian',
+                            ke: payload.lokasi,
+                            keterangan: `Barang baru masuk sejumlah ${payload.jumlah} unit`,
+                            tanggalMutasi: new Date().toISOString().split('T')[0],
+                            createdAt: serverTimestamp()
+                        });
+
+                        showToast("Aset berhasil disimpan!");
+                        document.getElementById('form-aset').reset();
+                        preview.innerHTML = `<i class="fas fa-camera text-4xl text-gray-300"></i>`;
+                        base64Image = '';
                     }
-                    showToast("Data berhasil disimpan!");
-                    switchTab('database');
                 } catch (err) {
-                    console.error(err);
-                    showToast("Gagal menyimpan data", "error");
-                    btn.disabled = false;
-                    btn.innerText = editData ? 'Update Aset' : 'Simpan Aset';
+                    console.error("Gagal simpan:", err);
+                    showToast("Gagal menyimpan aset ke cloud.", "error");
                 }
             };
         };
 
         const renderDatabase = (container) => {
             container.innerHTML = `
-                <div class="flex flex-col md:flex-row gap-4 mb-6">
-                    <div class="flex-1 relative">
-                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                        <input type="text" id="db-search" placeholder="Cari nama, merk, atau kode..." class="w-full pl-12 pr-4 py-3 bg-white rounded-xl shadow-sm outline-none focus:ring-2 focus:ring-sky-500 transition">
+                <div class="card-glass p-8 rounded-[2.5rem] space-y-6">
+                    <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div class="relative w-full md:w-96">
+                            <i class="fas fa-search absolute left-4 top-4 text-gray-400"></i>
+                            <input type="text" id="search-db" placeholder="Cari nama, merk, kode, lokasi..." class="w-full pl-12 pr-4 py-3 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none text-sm">
+                        </div>
+                        <div class="flex gap-3 w-full md:w-auto">
+                            <button onclick="window.print()" class="px-5 py-3 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition text-sm flex items-center gap-2">
+                                <i class="fas fa-print"></i> Cetak Laporan
+                            </button>
+                        </div>
                     </div>
-                    <div class="flex gap-2">
-                        <button onclick="switchTab('import-export')" class="bg-emerald-100 text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-200 transition">
-                            <i class="fas fa-file-excel mr-2"></i> Excel
-                        </button>
-                    </div>
-                </div>
 
-                <div class="card-glass rounded-[2rem] overflow-hidden">
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left">
+                        <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="bg-sky-900/5 text-sky-900 border-b border-sky-100">
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider">Info Barang</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider">Identitas</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider">Lokasi</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Stok</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider">Nilai</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-right">Aksi</th>
+                                <tr class="border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wider">
+                                    <th class="py-4 px-4">Barang</th>
+                                    <th class="py-4 px-4">Kode / SN</th>
+                                    <th class="py-4 px-4">Lokasi</th>
+                                    <th class="py-4 px-4">Jumlah</th>
+                                    <th class="py-4 px-4">Harga Satuan</th>
+                                    <th class="py-4 px-4 text-center">Aksi</th>
                                 </tr>
                             </thead>
-                            <tbody id="db-table-body" class="divide-y divide-gray-100">
-                                ${renderTableRows(assets)}
+                            <tbody id="table-assets-body" class="divide-y divide-gray-50 text-sm">
+                                ${assets.map(a => `
+                                    <tr class="hover:bg-sky-50/40 transition">
+                                        <td class="py-4 px-4 flex items-center gap-3">
+                                            <div class="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600 overflow-hidden shrink-0">
+                                                ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<i class="fas fa-cube"></i>`}
+                                            </div>
+                                            <div>
+                                                <p class="font-bold text-gray-800">${a.nama}</p>
+                                                <p class="text-xs text-gray-500">${a.merk}</p>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4 font-mono text-xs text-sky-600">${a.kode || '-'}</td>
+                                        <td class="py-4 px-4"><span class="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-xs font-semibold">${a.lokasi}</span></td>
+                                        <td class="py-4 px-4 font-bold text-gray-800">${a.jumlah} Unit</td>
+                                        <td class="py-4 px-4 text-gray-600">Rp ${(a.harga || 0).toLocaleString()}</td>
+                                        <td class="py-4 px-4 text-center">
+                                            <div class="flex items-center justify-center gap-2">
+                                                <button onclick="viewDetail('${a.id}')" title="Detail" class="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-eye text-xs"></i></button>
+                                                <button onclick="printSticker('${a.id}')" title="Cetak Barcode" class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-barcode text-xs"></i></button>
+                                                <button onclick="editAsset('${a.id}')" title="Edit" class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-edit text-xs"></i></button>
+                                                <button onclick="deleteAsset('${a.id}')" title="Hapus" class="w-8 h-8 rounded-xl bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-trash text-xs"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
                             </tbody>
                         </table>
                     </div>
                 </div>
             `;
 
-            document.getElementById('db-search').oninput = (e) => {
-                const term = e.target.value.toLowerCase();
+            const searchInput = document.getElementById('search-db');
+            searchInput.oninput = (e) => {
+                const keyword = e.target.value.toLowerCase();
                 const filtered = assets.filter(a => 
-                    a.nama.toLowerCase().includes(term) || 
-                    a.merk.toLowerCase().includes(term) || 
-                    (a.kode && a.kode.toLowerCase().includes(term))
+                    a.nama.toLowerCase().includes(keyword) || 
+                    a.merk.toLowerCase().includes(keyword) || 
+                    (a.kode && a.kode.toLowerCase().includes(keyword)) || 
+                    a.lokasi.toLowerCase().includes(keyword)
                 );
-                document.getElementById('db-table-body').innerHTML = renderTableRows(filtered);
-            };
-        };
-
-        const renderTableRows = (dataList) => {
-            if (dataList.length === 0) return `<tr><td colspan="6" class="px-6 py-12 text-center text-gray-400">Tidak ada data aset ditemukan.</td></tr>`;
-            
-            return dataList.map(a => `
-                <tr class="hover:bg-sky-50/30 transition group">
-                    <td class="px-6 py-4">
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden shrink-0">
-                                ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-300"><i class="fas fa-image"></i></div>`}
+                document.getElementById('table-assets-body').innerHTML = filtered.map(a => `
+                    <tr class="hover:bg-sky-50/40 transition">
+                        <td class="py-4 px-4 flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600 overflow-hidden shrink-0">
+                                ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<i class="fas fa-cube"></i>`}
                             </div>
                             <div>
                                 <p class="font-bold text-gray-800">${a.nama}</p>
                                 <p class="text-xs text-gray-500">${a.merk}</p>
                             </div>
+                        </td>
+                        <td class="py-4 px-4 font-mono text-xs text-sky-600">${a.kode || '-'}</td>
+                        <td class="py-4 px-4"><span class="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-xs font-semibold">${a.lokasi}</span></td>
+                        <td class="py-4 px-4 font-bold text-gray-800">${a.jumlah} Unit</td>
+                        <td class="py-4 px-4 text-gray-600">Rp ${(a.harga || 0).toLocaleString()}</td>
+                        <td class="py-4 px-4 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <button onclick="viewDetail('${a.id}')" title="Detail" class="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-eye text-xs"></i></button>
+                                <button onclick="printSticker('${a.id}')" title="Cetak Barcode" class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-barcode text-xs"></i></button>
+                                <button onclick="editAsset('${a.id}')" title="Edit" class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-edit text-xs"></i></button>
+                                <button onclick="deleteAsset('${a.id}')" title="Hapus" class="w-8 h-8 rounded-xl bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-trash text-xs"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            };
+        };
+
+        // --- Global Asset Action Helpers ---
+        window.viewDetail = (id) => {
+            const a = assets.find(item => item.id === id);
+            if (!a) return;
+
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalBody = document.getElementById('modal-body');
+
+            modalBody.innerHTML = `
+                <div class="space-y-6">
+                    <div class="flex items-center gap-4 pb-6 border-b border-gray-100">
+                        <div class="w-20 h-20 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-600 overflow-hidden shrink-0">
+                            ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<i class="fas fa-cube text-2xl"></i>`}
                         </div>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600 font-mono">${a.kode || '-'}</td>
-                    <td class="px-6 py-4">
-                        <span class="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-bold">${a.lokasi}</span>
-                    </td>
-                    <td class="px-6 py-4 text-center font-bold text-sky-800">${a.jumlah}</td>
-                    <td class="px-6 py-4 text-sm font-semibold">Rp ${parseInt(a.harga).toLocaleString()}</td>
-                    <td class="px-6 py-4 text-right">
-                        <div class="flex justify-end gap-2">
-                            <button onclick="editAsset('${a.id}')" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition" title="Edit"><i class="fas fa-edit"></i></button>
-                            <button onclick="deleteAssetConfirm('${a.id}')" class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition" title="Hapus"><i class="fas fa-trash-alt"></i></button>
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-800">${a.nama}</h3>
+                            <p class="text-sm text-sky-600 font-semibold">${a.merk}</p>
+                            <p class="text-xs text-gray-400 mt-1">Kode / SN: ${a.kode || '-'}</p>
                         </div>
-                    </td>
-                </tr>
-            `).join('');
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+                        <div class="bg-gray-50 p-4 rounded-2xl">
+                            <p class="text-xs text-gray-400 font-medium">Lokasi Ruangan</p>
+                            <p class="text-base font-bold text-gray-800 mt-1">${a.lokasi}</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-2xl">
+                            <p class="text-xs text-gray-400 font-medium">Jumlah Unit</p>
+                            <p class="text-base font-bold text-gray-800 mt-1">${a.jumlah} Unit</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-2xl">
+                            <p class="text-xs text-gray-400 font-medium">Harga Satuan</p>
+                            <p class="text-base font-bold text-gray-800 mt-1">Rp ${(a.harga || 0).toLocaleString()}</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-2xl">
+                            <p class="text-xs text-gray-400 font-medium">Total Valuasi</p>
+                            <p class="text-base font-bold text-gray-800 mt-1">Rp ${((a.harga || 0) * (a.jumlah || 0)).toLocaleString()}</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-2xl">
+                            <p class="text-xs text-gray-400 font-medium">Tanggal Pembelian</p>
+                            <p class="text-base font-bold text-gray-800 mt-1">${a.tanggal || '-'}</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-2xl">
+                            <p class="text-xs text-gray-400 font-medium">Vendor / Supplier</p>
+                            <p class="text-base font-bold text-gray-800 mt-1">${a.vendor || '-'}</p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                        <button onclick="printSticker('${a.id}')" class="px-6 py-3 bg-sky-600 text-white font-bold rounded-xl hover:bg-sky-700 transition text-sm">Cetak Barcode</button>
+                        <button onclick="closeModal()" class="px-6 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition text-sm">Tutup</button>
+                    </div>
+                </div>
+            `;
+            modalOverlay.style.display = 'flex';
+        };
+
+        window.printSticker = (id) => {
+            const a = assets.find(item => item.id === id);
+            if (!a) return;
+
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalBody = document.getElementById('modal-body');
+
+            modalBody.innerHTML = `
+                <div class="space-y-6 text-center">
+                    <h3 class="text-xl font-bold text-gray-800">Cetak Label / Barcode Aset</h3>
+                    <div id="print-area" class="border-2 border-dashed border-gray-300 p-6 rounded-3xl max-w-sm mx-auto bg-white space-y-3">
+                        <div class="font-bold text-sm text-sky-900">RSU DADI KELUARGA</div>
+                        <div class="text-xs font-semibold text-gray-600">INVENTARIS RUMAH TANGGA</div>
+                        <hr class="border-gray-200">
+                        <div class="py-2 font-mono font-bold text-lg">${a.kode || 'SIMARS-001'}</div>
+                        <div class="text-sm font-bold text-gray-800">${a.nama}</div>
+                        <div class="text-xs text-gray-500">Merk: ${a.merk}</div>
+                        <div class="text-xs font-semibold text-sky-600 bg-sky-50 py-1 rounded-lg">Lokasi: ${a.lokasi}</div>
+                    </div>
+                    <div class="flex justify-center gap-4">
+                        <button onclick="window.print()" class="px-6 py-3 bg-sky-600 text-white font-bold rounded-xl hover:bg-sky-700 transition text-sm">Cetak Sekarang</button>
+                        <button onclick="closeModal()" class="px-6 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition text-sm">Tutup</button>
+                    </div>
+                </div>
+            `;
+            modalOverlay.style.display = 'flex';
         };
 
         window.editAsset = (id) => {
-            const data = assets.find(a => a.id === id);
-            if (data) {
-                switchTab('input-aset');
-                renderInputAset(document.getElementById('content-container'), data);
-                document.getElementById('tab-title').innerText = "Edit Data Aset";
-            }
+            const a = assets.find(item => item.id === id);
+            if (!a) return;
+            switchTab('input-aset');
+            setTimeout(() => {
+                renderInputAset(document.getElementById('content-container'), a);
+            }, 50);
         };
 
-        window.deleteAssetConfirm = (id) => {
-            customConfirm(
-                "Hapus Aset", 
-                "Apakah Anda yakin ingin menghapus aset ini secara permanen dari cloud?", 
-                async () => {
+        window.deleteAsset = (id) => {
+            customConfirm("Hapus Aset", "Apakah Anda yakin ingin menghapus aset ini dari database?", async () => {
+                try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', id));
-                    showToast("Aset berhasil dihapus");
-                }, 
-                "danger"
-            );
+                    showToast("Aset berhasil dihapus!");
+                } catch (err) {
+                    console.error("Gagal hapus:", err);
+                    showToast("Gagal menghapus aset.", "error");
+                }
+            });
         };
 
         const renderPencarian = (container) => {
             container.innerHTML = `
                 <div class="max-w-3xl mx-auto space-y-8">
-                    <div class="card-glass p-8 rounded-[2rem] text-center">
-                        <h4 class="font-bold text-gray-800 mb-6">Scan Barcode / Cari Manual Menyeluruh</h4>
-                        <div class="space-y-4">
-                            <div class="relative">
-                                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                                <input type="text" id="search-input" placeholder="Ketik Nama, Kode Inventaris, atau Merk Barang..." class="w-full pl-12 pr-4 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner">
-                            </div>
-                            <div class="flex items-center gap-4 py-2">
-                                <div class="flex-1 h-px bg-gray-200"></div>
-                                <span class="text-xs text-gray-400 font-bold uppercase">ATAU</span>
-                                <div class="flex-1 h-px bg-gray-200"></div>
-                            </div>
-                            <!-- Desain tombol modern dengan bayangan halus, transisi transparan, dan gradient segar -->
-                            <button id="btn-scan" class="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-sky-200 hover:shadow-sky-300 transition-all duration-300 active:scale-[0.99]">
-                                <i class="fas fa-camera"></i> <span id="scan-btn-text">Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)</span>
-                            </button>
-                            <!-- Kontainer kamera dengan pengaturan flex, border radius, serta aspek rasio responsif -->
-                            <div id="reader" class="overflow-hidden rounded-2xl bg-black hidden mt-4 w-full max-w-lg mx-auto shadow-inner relative" style="min-height: 250px;"></div>
-                        </div>
+                    <div class="card-glass p-8 rounded-[2.5rem] text-center space-y-6">
+                        <h3 class="text-xl font-bold text-gray-800">Scan Barcode / QR Code Aset</h3>
+                        <p class="text-sm text-gray-500">Arahkan kamera ke barcode atau QR code pada fisik barang.</p>
+                        <div id="reader" class="w-full max-w-md mx-auto rounded-2xl overflow-hidden shadow-lg hidden"></div>
+                        <button id="btn-start-scan" class="px-8 py-4 bg-sky-600 text-white font-bold rounded-2xl shadow-xl shadow-sky-200 hover:bg-sky-700 transition">
+                            <i class="fas fa-camera mr-2"></i> Buka Kamera Scanner
+                        </button>
                     </div>
-
-                    <div id="search-result" class="hidden">
-                        <!-- Hasil pencarian akan muncul di sini -->
+                    
+                    <div id="scan-result" class="card-glass p-8 rounded-[2.5rem] hidden">
+                        <h4 class="font-bold text-gray-800 mb-4">Hasil Pindai Aset</h4>
+                        <div id="scan-result-content"></div>
                     </div>
                 </div>
             `;
 
-            const input = document.getElementById('search-input');
-            const resultDiv = document.getElementById('search-result');
-            const scanBtnText = document.getElementById('scan-btn-text');
+            const btnStart = document.getElementById('btn-start-scan');
+            const readerDiv = document.getElementById('reader');
+            const resultDiv = document.getElementById('scan-result');
+            const resultContent = document.getElementById('scan-result-content');
 
-            // Logika pencarian yang disempurnakan: Tampilkan daftar jika banyak kecocokan
-            input.oninput = (e) => {
-                const term = e.target.value.toLowerCase().trim();
-                if (term.length < 2) {
-                    resultDiv.classList.add('hidden');
-                    return;
-                }
-                
-                // Cari diseluruh properti yang memungkinkan
-                const foundAssets = assets.filter(a => 
-                    a.nama.toLowerCase().includes(term) || 
-                    (a.kode && a.kode.toLowerCase().includes(term)) ||
-                    a.merk.toLowerCase().includes(term) ||
-                    a.lokasi.toLowerCase().includes(term)
-                );
-
-                if (foundAssets.length === 1) {
-                    showAssetDetail(foundAssets[0]);
-                } else if (foundAssets.length > 1) {
-                    window.showAssetList(foundAssets);
-                } else {
-                    resultDiv.innerHTML = `<div class="p-8 text-center text-gray-500 bg-white rounded-[2rem] shadow-sm border border-gray-100">Tidak ada barang ditemukan untuk kata kunci "<span class="font-bold text-gray-700">${term}</span>"</div>`;
-                    resultDiv.classList.remove('hidden');
-                }
-            };
-
-            document.getElementById('btn-scan').onclick = async () => {
-                const reader = document.getElementById('reader');
-                
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    showToast("Error: Gagal mengakses kamera. Pastikan aplikasi dibuka lewat protokol HTTPS aman.", "error");
-                    return;
-                }
-
-                if (window.activeScanner) {
-                    scanBtnText.innerText = "Menonaktifkan Kamera...";
-                    try {
-                        if (window.activeScanner.isScanning) {
-                            await window.activeScanner.stop();
-                        }
-                    } catch (err) {
-                        console.warn("Info stop scanner:", err);
-                    } finally {
-                        try {
-                            if (window.activeScanner) {
-                                window.activeScanner.clear();
-                            }
-                        } catch(e){}
-                        window.activeScanner = null;
-                        reader.innerHTML = "";
-                        reader.classList.add('hidden');
-                        scanBtnText.innerText = "Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)";
-                    }
-                    return;
-                }
-
-                reader.classList.remove('hidden');
-                reader.innerHTML = ""; 
-                scanBtnText.innerText = "Menyiapkan Layar Kamera...";
-                
-                await new Promise(resolve => setTimeout(resolve, 300));
-
-                const verifiedReader = document.getElementById('reader');
-                if (!verifiedReader) {
-                    showToast("Error: Elemen penampil kamera tidak ditemukan di layar.", "error");
-                    scanBtnText.innerText = "Aktifkan Kamera";
-                    return;
-                }
+            btnStart.onclick = async () => {
+                btnStart.classList.add('hidden');
+                readerDiv.classList.remove('hidden');
 
                 try {
-                    // Peningkatan pada konfigurasi format dukungan
-                    window.activeScanner = new Html5Qrcode("reader", { 
-                        formatsToSupport: [ 
-                            Html5QrcodeSupportedFormats.QR_CODE, 
-                            Html5QrcodeSupportedFormats.CODE_128, 
-                            Html5QrcodeSupportedFormats.EAN_13,
-                            Html5QrcodeSupportedFormats.CODE_39
-                        ] 
-                    });
-                } catch (initErr) {
-                    console.error("Gagal instansiasi Html5Qrcode:", initErr);
-                    showToast("Gagal memuat sistem kamera.", "error");
-                    reader.classList.add('hidden');
-                    scanBtnText.innerText = "Aktifkan Kamera";
-                    window.activeScanner = null;
-                    return;
-                }
-
-                scanBtnText.innerText = "Menghubungkan Kamera...";
-
-                // Perbaikan Konfigurasi Landscape / Portrait Auto-detect
-                const config = {
-                    fps: 15,
-                    qrbox: function(viewfinderWidth, viewfinderHeight) {
-                        // Membuat kotak scan (bidikan) fleksibel yang menyesuaikan orientasi layar HP
-                        // Kotak lebih melebar (width > height) cocok untuk scan 1D (Barcode biasa) dalam posisi apapun.
-                        return {
-                            width: Math.floor(viewfinderWidth * 0.9), 
-                            height: Math.floor(viewfinderHeight * 0.45)
-                        };
-                    }
-                    // aspectRatio sengaja DIHILANGKAN agar library menyesuaikan dengan natural rotasi HP (Landscape/Portrait)
-                };
-
-                const scanSuccessCallback = (decodedText) => {
-                    input.value = decodedText;
-                    // Pada saat scan, kita lebih berharap menemukan 1 identitas spesifik
-                    const found = assets.find(a => a.kode === decodedText || a.nama.toLowerCase() === decodedText.toLowerCase());
+                    const html5QrCode = new Html5Qrcode("reader");
+                    window.activeScanner = html5QrCode;
                     
-                    if (found) {
-                        showAssetDetail(found);
-                        if (window.activeScanner) {
-                            window.activeScanner.stop().then(() => {
-                                window.activeScanner.clear();
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        (decodedText) => {
+                            html5QrCode.stop().then(() => {
+                                readerDiv.classList.add('hidden');
+                                btnStart.classList.remove('hidden');
                                 window.activeScanner = null;
-                                reader.innerHTML = "";
-                                reader.classList.add('hidden');
-                                scanBtnText.innerText = "Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)";
-                            }).catch(err => console.error("Gagal stop setelah scan sukses:", err));
-                        }
-                    } else {
-                        showToast("Kode tidak terdaftar di database: " + decodedText, "warning");
-                    }
-                };
+                            }).catch(err => console.error(err));
 
-                try {
-                    await window.activeScanner.start(
-                        { facingMode: "environment" }, 
-                        config, 
-                        scanSuccessCallback,
-                        () => { /* Callback error frame biasa dibiarkan kosong */ }
+                            // Cari aset berdasarkan kode atau nama
+                            const found = assets.find(a => a.kode === decodedText || a.nama.toLowerCase().includes(decodedText.toLowerCase()));
+                            resultDiv.classList.remove('hidden');
+                            if (found) {
+                                resultContent.innerHTML = `
+                                    <div class="space-y-4">
+                                        <div class="p-4 bg-emerald-50 text-emerald-800 rounded-2xl font-bold text-sm">
+                                            ✓ Aset Ditemukan (Query: ${decodedText})
+                                        </div>
+                                        <div class="p-6 bg-gray-50 rounded-2xl space-y-2">
+                                            <p class="text-lg font-bold text-gray-800">${found.nama} (${found.merk})</p>
+                                            <p class="text-sm text-gray-600">Kode: <span class="font-mono font-bold">${found.kode}</span></p>
+                                            <p class="text-sm text-gray-600">Lokasi: <span class="font-bold text-sky-600">${found.lokasi}</span></p>
+                                            <p class="text-sm text-gray-600">Jumlah: <span class="font-bold">${found.jumlah} Unit</span></p>
+                                        </div>
+                                        <button onclick="viewDetail('${found.id}')" class="w-full py-3 bg-sky-600 text-white font-bold rounded-xl hover:bg-sky-700 transition">Lihat Detail Lengkap</button>
+                                    </div>
+                                `;
+                            } else {
+                                resultContent.innerHTML = `
+                                    <div class="p-4 bg-red-50 text-red-800 rounded-2xl font-bold text-sm">
+                                        ✕ Aset dengan kode "${decodedText}" tidak ditemukan dalam database.
+                                    </div>
+                                `;
+                            }
+                        },
+                        (errorMessage) => {
+                            // scanning frame error ignore
+                        }
                     );
-                    scanBtnText.innerText = "Matikan Kamera Scan";
-                } catch (directErr) {
-                    console.warn("Metode direct start gagal, menjalankan prosedur fallback getCameras...", directErr);
-                    
-                    try {
-                        const devices = await Html5Qrcode.getCameras();
-                        if (devices && devices.length > 0) {
-                            let selectedCamera = devices.find(device => {
-                                const lbl = device.label.toLowerCase();
-                                return lbl.includes('back') || 
-                                       lbl.includes('rear') || 
-                                       lbl.includes('environment') || 
-                                       lbl.includes('belakang') || 
-                                       lbl.includes('main') || 
-                                       lbl.includes('0, facing back');
-                            });
-
-                            const cameraId = selectedCamera ? selectedCamera.id : devices[devices.length - 1].id;
-                            
-                            await window.activeScanner.start(
-                                cameraId, 
-                                config, 
-                                scanSuccessCallback,
-                                () => { /* Muted frame error */ }
-                            );
-                            scanBtnText.innerText = "Matikan Kamera Scan";
-                        } else {
-                            throw new Error("Tidak ada kamera terdeteksi di perangkat.");
-                        }
-                    } catch (fallbackErr) {
-                        console.error("Semua metode inisialisasi kamera gagal:", fallbackErr);
-                        showToast("Izin kamera ditolak atau kamera tidak ditemukan pada browser smartphone Anda.", "error");
-                        
-                        if (window.activeScanner) {
-                            try { window.activeScanner.clear(); } catch(e){}
-                            window.activeScanner = null;
-                        }
-                        reader.innerHTML = "";
-                        reader.classList.add('hidden');
-                        scanBtnText.innerText = "Aktifkan Kamera";
-                    }
+                } catch (err) {
+                    console.error("Scanner Error:", err);
+                    showToast("Gagal mengakses kamera.", "error");
+                    btnStart.classList.remove('hidden');
+                    readerDiv.classList.add('hidden');
                 }
             };
-        };
-
-        window.showAssetList = (assetList) => {
-            const resultDiv = document.getElementById('search-result');
-            resultDiv.classList.remove('hidden');
-
-            resultDiv.innerHTML = `
-                <div class="card-glass p-6 md:p-8 rounded-[2rem]">
-                    <h4 class="font-bold text-gray-800 mb-4 pb-4 border-b border-gray-100 flex items-center justify-between">
-                        <span>Hasil Pencarian (${assetList.length} ditemukan)</span>
-                        <span class="text-xs text-sky-600 font-normal">Klik item untuk detail</span>
-                    </h4>
-                    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                        ${assetList.map(a => `
-                            <div onclick="showAssetDetailObject('${a.id}')" class="flex items-center gap-4 p-4 bg-white/50 hover:bg-sky-50 rounded-2xl cursor-pointer transition border border-gray-100 hover:border-sky-300 shadow-sm">
-                                <div class="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden shrink-0 shadow-inner">
-                                    ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-400"><i class="fas fa-image"></i></div>`}
-                                </div>
-                                <div class="flex-1 overflow-hidden">
-                                    <h5 class="font-bold text-gray-800 text-sm truncate">${a.nama}</h5>
-                                    <div class="flex items-center gap-2 mt-1">
-                                        <span class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-ellipsis overflow-hidden whitespace-nowrap max-w-[100px]">${a.merk}</span>
-                                        <span class="text-[10px] text-sky-700 font-bold bg-sky-50 px-2 py-0.5 rounded"><i class="fas fa-map-marker-alt mr-1"></i>${a.lokasi}</span>
-                                    </div>
-                                </div>
-                                <div class="text-right flex flex-col items-end gap-1">
-                                    <span class="px-2.5 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-lg shadow-sm border border-green-200">${a.jumlah} Stok</span>
-                                    ${a.kode ? `<span class="text-[9px] font-mono text-gray-400 border px-1 rounded">${a.kode}</span>` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        };
-
-        window.showAssetDetailObject = (id) => {
-            const asset = assets.find(a => a.id === id);
-            if (asset) showAssetDetail(asset);
-        };
-
-        const showAssetDetail = (asset) => {
-            const resultDiv = document.getElementById('search-result');
-            resultDiv.classList.remove('hidden');
-            
-            const history = mutations.filter(m => m.assetId === asset.id);
-
-            resultDiv.innerHTML = `
-                <div class="card-glass rounded-[2rem] overflow-hidden">
-                    <div class="h-64 bg-gray-200 overflow-hidden relative">
-                        ${asset.foto ? `<img src="${asset.foto}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-300 text-6xl"><i class="fas fa-image"></i></div>`}
-                        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 p-8 text-white">
-                            <p class="text-xs font-bold uppercase tracking-widest text-sky-300">${asset.merk}</p>
-                            <h3 class="text-3xl font-bold">${asset.nama}</h3>
-                        </div>
-                    </div>
-                    <div class="p-8 space-y-6">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="bg-gray-50 p-4 rounded-2xl">
-                                <p class="text-[10px] text-gray-400 font-bold uppercase">Lokasi Saat Ini</p>
-                                <p class="text-sky-700 font-bold">${asset.lokasi}</p>
-                            </div>
-                            <div class="bg-gray-50 p-4 rounded-2xl">
-                                <p class="text-[10px] text-gray-400 font-bold uppercase">Stok Tersedia</p>
-                                <p class="text-gray-800 font-bold">${asset.jumlah} Unit</p>
-                            </div>
-                            <div class="bg-gray-50 p-4 rounded-2xl">
-                                <p class="text-[10px] text-gray-400 font-bold uppercase">Kode SN/Inventaris</p>
-                                <p class="text-gray-800 font-mono text-sm">${asset.kode || '-'}</p>
-                            </div>
-                            <div class="bg-gray-50 p-4 rounded-2xl">
-                                <p class="text-[10px] text-gray-400 font-bold uppercase">Tgl Beli</p>
-                                <p class="text-gray-800 font-bold">${asset.tanggal || '-'}</p>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h5 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="fas fa-history text-sky-600"></i> Histori & Mutasi Barang
-                            </h5>
-                            <div class="border rounded-2xl overflow-hidden bg-white">
-                                <table class="w-full text-left text-xs">
-                                    <tr class="bg-gray-50">
-                                        <th class="p-3">Tanggal</th>
-                                        <th class="p-3">Tipe</th>
-                                        <th class="p-3">Keterangan</th>
-                                    </tr>
-                                    <tr class="border-b">
-                                        <td class="p-3 text-gray-400">${asset.tanggal || 'N/A'}</td>
-                                        <td class="p-3"><span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold">Pembelian</span></td>
-                                        <td class="p-3">Input awal dari ${asset.vendor || 'Supplier'}</td>
-                                    </tr>
-                                    ${history.map(h => `
-                                        <tr class="border-b">
-                                            <td class="p-3 text-gray-400">${h.tanggalMutasi ? new Date(h.tanggalMutasi).toLocaleDateString('id-ID') : new Date(h.createdAt?.seconds * 1000).toLocaleDateString('id-ID')}</td>
-                                            <td class="p-3">
-                                                <span class="px-2 py-0.5 ${h.tipe === 'Mutasi' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'} rounded-full font-bold">${h.tipe}</span>
-                                            </td>
-                                            <td class="p-3">${h.tipe === 'Mutasi' ? `Ke ${h.ke}` : h.keterangan}</td>
-                                        </tr>
-                                    `).join('')}
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
         };
 
         const renderRuangan = (container) => {
             container.innerHTML = `
-                <div class="flex flex-col md:flex-row gap-6 mb-8">
-                    <div class="flex-1 card-glass p-6 rounded-3xl">
-                        <label class="text-sm font-bold text-gray-700 mb-2 block">Pilih Ruangan Terlebih Dahulu</label>
-                        <div class="flex gap-4">
-                            <select id="filter-ruangan" class="flex-1 p-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none">
-                                <option value="">Semua Ruangan</option>
-                                ${rooms.map(r => `<option value="${r.nama}">${r.nama}</option>`).join('')}
-                            </select>
-                            <button id="btn-print-room" class="bg-sky-600 text-white px-6 rounded-xl font-bold hover:bg-sky-700 transition">
-                                <i class="fas fa-print mr-2"></i> Cetak PDF
-                            </button>
-                        </div>
+                <div class="space-y-8">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        ${rooms.map(r => {
+                            const roomAssets = assets.filter(a => a.lokasi === r.nama);
+                            const totalQty = roomAssets.reduce((acc, curr) => acc + (parseInt(curr.jumlah) || 0), 0);
+                            return `
+                                <div class="card-glass p-6 rounded-3xl space-y-4 hover:shadow-xl transition">
+                                    <div class="flex justify-between items-start">
+                                        <div class="w-12 h-12 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-600">
+                                            <i class="fas fa-door-open"></i>
+                                        </div>
+                                        <span class="px-3 py-1 bg-sky-50 text-sky-600 rounded-full text-xs font-bold">${totalQty} Unit</span>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-gray-800 text-lg">${r.nama}</h4>
+                                        <p class="text-xs text-gray-500 mt-1">${roomAssets.length} Jenis Barang Terdaftar</p>
+                                    </div>
+                                    <button onclick="viewRoomDetail('${r.nama}')" class="w-full py-3 bg-sky-50 text-sky-600 font-bold rounded-xl hover:bg-sky-600 hover:text-white transition text-sm">Kelola Ruangan</button>
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
-                </div>
-
-                <div id="room-asset-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Assets filtered by room -->
                 </div>
             `;
-
-            const filter = document.getElementById('filter-ruangan');
-            const grid = document.getElementById('room-asset-grid');
-
-            const renderFiltered = (roomName) => {
-                const filtered = roomName ? assets.filter(a => a.lokasi === roomName) : assets;
-                grid.innerHTML = filtered.map(a => `
-                    <div class="card-glass rounded-3xl overflow-hidden group cursor-pointer hover:shadow-xl transition" onclick="openAssetPreview('${a.id}')">
-                        <div class="h-40 bg-gray-100 relative">
-                            ${a.foto ? `<img src="${a.foto}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-300"><i class="fas fa-image text-3xl"></i></div>`}
-                            <div class="absolute top-4 right-4 bg-white/90 px-3 py-1 rounded-full text-[10px] font-bold shadow-sm">
-                                ${a.jumlah} Unit
-                            </div>
-                        </div>
-                        <div class="p-4">
-                            <p class="text-[10px] font-bold text-sky-600 uppercase mb-1">${a.merk}</p>
-                            <h5 class="font-bold text-gray-800 line-clamp-1">${a.nama}</h5>
-                            <div class="flex justify-between items-center mt-3 pt-3 border-t">
-                                <span class="text-[10px] text-gray-400 font-mono">${a.kode || '-'}</span>
-                                <span class="text-[10px] bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full font-bold">${a.lokasi}</span>
-                            </div>
-                        </div>
-                    </div>
-                `).join(filtered.length === 0 ? '<div class="col-span-full p-20 text-center text-gray-400">Tidak ada barang di ruangan ini.</div>' : '');
-            };
-
-            filter.onchange = (e) => renderFiltered(e.target.value);
-            renderFiltered("");
-
-            document.getElementById('btn-print-room').onclick = () => {
-                const room = filter.value;
-                if (!room) return showToast("Pilih ruangan terlebih dahulu", "warning");
-                exportToPDF(room); // Asumsi fungsi ini telah di definisikan dari source sebelumnya
-            };
         };
 
-        window.openAssetPreview = (id) => {
-            const asset = assets.find(a => a.id === id);
-            if (!asset) return;
-
+        window.viewRoomDetail = (roomName) => {
+            const roomAssets = assets.filter(a => a.lokasi === roomName);
+            const modalOverlay = document.getElementById('modal-overlay');
             const modalBody = document.getElementById('modal-body');
+
             modalBody.innerHTML = `
-                <div class="flex flex-col md:flex-row gap-8">
-                    <div class="md:w-1/2 aspect-square rounded-3xl bg-gray-100 overflow-hidden">
-                        ${asset.foto ? `<img src="${asset.foto}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-gray-300 text-6xl"><i class="fas fa-image"></i></div>`}
-                    </div>
-                    <div class="md:w-1/2 space-y-6">
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center pb-4 border-b border-gray-100">
                         <div>
-                            <h2 class="text-3xl font-bold text-sky-900">${asset.nama}</h2>
-                            <p class="text-sky-600 font-medium">${asset.merk}</p>
+                            <h3 class="text-xl font-bold text-gray-800">Detail Aset Ruangan: ${roomName}</h3>
+                            <p class="text-xs text-gray-500">Total ${roomAssets.length} jenis barang di ruangan ini.</p>
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="p-4 bg-gray-50 rounded-2xl border">
-                                <p class="text-[10px] text-gray-400 font-bold uppercase">Stok</p>
-                                <p class="text-xl font-bold text-gray-800">${asset.jumlah} <span class="text-xs font-normal">Unit</span></p>
-                            </div>
-                            <div class="p-4 bg-gray-50 rounded-2xl border">
-                                <p class="text-[10px] text-gray-400 font-bold uppercase">Lokasi</p>
-                                <p class="text-xl font-bold text-sky-700">${asset.lokasi}</p>
-                            </div>
-                        </div>
-                        <div class="space-y-3">
-                            <div class="flex justify-between border-b pb-2">
-                                <span class="text-gray-500 text-sm">Kode Inventaris</span>
-                                <span class="font-mono font-bold">${asset.kode || '-'}</span>
-                            </div>
-                            <div class="flex justify-between border-b pb-2">
-                                <span class="text-gray-500 text-sm">Tgl Pembelian</span>
-                                <span class="font-bold">${asset.tanggal || '-'}</span>
-                            </div>
-                            <div class="flex justify-between border-b pb-2">
-                                <span class="text-gray-500 text-sm">Vendor</span>
-                                <span class="font-bold">${asset.vendor || '-'}</span>
-                            </div>
-                            <div class="flex justify-between border-b pb-2">
-                                <span class="text-gray-500 text-sm">Estimasi Harga</span>
-                                <span class="font-bold">Rp ${parseInt(asset.harga).toLocaleString()}</span>
-                            </div>
-                        </div>
-                        <button onclick="closeModal()" class="w-full bg-gray-100 text-gray-700 font-bold py-4 rounded-2xl hover:bg-gray-200 transition">
-                            Tutup Preview
-                        </button>
+                        <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition text-sm">Tutup</button>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wider">
+                                    <th class="py-3 px-3">Nama Barang</th>
+                                    <th class="py-3 px-3">Kode</th>
+                                    <th class="py-3 px-3">Merk</th>
+                                    <th class="py-3 px-3">Jumlah</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-50 text-sm">
+                                ${roomAssets.length > 0 ? roomAssets.map(a => `
+                                    <tr>
+                                        <td class="py-3 px-3 font-bold text-gray-800">${a.nama}</td>
+                                        <td class="py-3 px-3 font-mono text-xs text-sky-600">${a.kode || '-'}</td>
+                                        <td class="py-3 px-3 text-gray-600">${a.merk}</td>
+                                        <td class="py-3 px-3 font-bold text-gray-800">${a.jumlah} Unit</td>
+                                    </tr>
+                                `).join('') : `<tr><td colspan="4" class="py-6 text-center text-gray-400">Belum ada aset di ruangan ini.</td></tr>`}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             `;
-            document.getElementById('modal-overlay').style.display = 'flex';
+            modalOverlay.style.display = 'flex';
         };
 
-        const renderInputMutasi = (container, editData = null) => {
+        const renderInputMutasi = (container) => {
             container.innerHTML = `
-                <div class="max-w-2xl mx-auto">
-                    <form id="form-mutasi" class="card-glass p-8 rounded-[2rem] space-y-6">
-                        
-                        <!-- Penambahan Fitur: Filter Ruangan Asal -->
-                        <div class="space-y-2 mb-2 p-4 bg-sky-50/50 rounded-2xl border border-sky-100">
-                            <label class="text-sm font-bold text-sky-900 flex items-center gap-2">
-                                <i class="fas fa-filter text-sky-500"></i> Filter Ruangan Asal (Opsional)
-                            </label>
-                            <select id="mutasi-filter-ruangan" class="w-full p-3 bg-white border border-sky-100 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-sm shadow-sm transition">
-                                <option value="">-- Semua Ruangan --</option>
-                                ${rooms.map(r => `<option value="${r.nama}">${r.nama}</option>`).join('')}
-                            </select>
-                            <p class="text-[10px] text-gray-500 mt-1">Pilih ruangan terlebih dahulu agar daftar pencarian barang lebih spesifik dan mudah ditemukan.</p>
-                        </div>
-
+                <div class="max-w-3xl mx-auto">
+                    <form id="form-mutasi" class="card-glass p-10 rounded-[2.5rem] space-y-6">
                         <div class="space-y-2">
-                            <label class="text-sm font-bold text-gray-700">Pilih Barang yang Akan Dimutasi <span class="text-red-500">*</span></label>
-                            <select id="mutasi-asset-id" required class="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none shadow-inner">
-                                <option value="">Memuat data barang...</option>
+                            <label class="text-sm font-bold text-gray-700">Pilih Aset / Barang <span class="text-red-500">*</span></label>
+                            <select id="mutasi-aset" required class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
+                                <option value="">Pilih Barang</option>
+                                ${assets.map(a => `<option value="${a.id}">${a.nama} - ${a.merk} (Lokasi: ${a.lokasi}, Stok: ${a.jumlah})</option>`).join('')}
                             </select>
                         </div>
-                        
-                        <div class="space-y-2">
-                            <label class="text-sm font-bold text-gray-700">Tanggal Mutasi <span class="text-red-500">*</span></label>
-                            <input type="date" id="mutasi-tanggal" required value="${editData?.tanggalMutasi || ''}" class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div class="space-y-2">
-                                <label class="text-sm font-bold text-gray-700">Jenis Perubahan Status</label>
-                                <select id="mutasi-tipe" required class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">
-                                    <option value="Mutasi" ${editData?.tipe === 'Mutasi' ? 'selected' : ''}>Mutasi Ruangan</option>
-                                    <option value="Rusak" ${editData?.tipe === 'Rusak' ? 'selected' : ''}>Laporan Rusak</option>
-                                    <option value="Dipinjam" ${editData?.tipe === 'Dipinjam' ? 'selected' : ''}>Peminjaman</option>
+                                <label class="text-sm font-bold text-gray-700">Tipe Transaksi <span class="text-red-500">*</span></label>
+                                <select id="mutasi-tipe" required class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
+                                    <option value="Mutasi">Mutasi / Pindah Ruangan</option>
+                                    <option value="Rusak">Lapor Rusak</option>
+                                    <option value="Opname">Opname / Penyesuaian Stok</option>
                                 </select>
                             </div>
                             <div class="space-y-2">
-                                <label class="text-sm font-bold text-gray-700">Jumlah Barang</label>
-                                <input type="number" id="mutasi-jumlah" required min="1" value="${editData?.jumlah || ''}" placeholder="Max stok" class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">
+                                <label class="text-sm font-bold text-gray-700">Tanggal Transaksi</label>
+                                <input type="date" id="mutasi-tanggal" required class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
                             </div>
                         </div>
-
-                        <div id="mutasi-ke-container" class="space-y-2" style="${editData?.tipe === 'Mutasi' || !editData ? 'display: block;' : 'display: none;'}">
+                        <div class="space-y-2" id="div-tujuan">
                             <label class="text-sm font-bold text-gray-700">Ruangan Tujuan <span class="text-red-500">*</span></label>
-                            <select id="mutasi-ke" class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">
+                            <select id="mutasi-tujuan" class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
                                 <option value="">Pilih Ruangan Tujuan</option>
-                                ${rooms.map(r => `<option value="${r.nama}" ${editData?.ke === r.nama ? 'selected' : ''}>${r.nama}</option>`).join('')}
+                                ${rooms.map(r => `<option value="${r.nama}">${r.nama}</option>`).join('')}
                             </select>
                         </div>
-
                         <div class="space-y-2">
-                            <label class="text-sm font-bold text-gray-700">Keterangan Tambahan</label>
-                            <textarea id="mutasi-keterangan" rows="3" placeholder="Alasan mutasi / detail kerusakan..." class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 outline-none">${editData?.keterangan || ''}</textarea>
+                            <label class="text-sm font-bold text-gray-700">Keterangan / Alasan <span class="text-red-500">*</span></label>
+                            <textarea id="mutasi-ket" required rows="3" placeholder="Contoh: Pindah ruangan karena rotasi unit..." class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none"></textarea>
                         </div>
-
-                        <button type="submit" id="btn-save-mutasi" class="w-full bg-sky-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-sky-100 hover:bg-sky-700 transition active:scale-[0.98]">
-                            ${editData ? 'Update Catatan Status / Mutasi' : 'Proses Perubahan Status'}
-                        </button>
+                        <button type="submit" class="w-full bg-sky-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-sky-200 hover:bg-sky-700 transition">Simpan Transaksi Mutasi</button>
                     </form>
                 </div>
             `;
 
-            // Logika Update Dropdown berdasarkan Filter Ruangan
-            const filterRuangan = document.getElementById('mutasi-filter-ruangan');
-            const assetSelect = document.getElementById('mutasi-asset-id');
-
-            const updateAssetOptions = () => {
-                const selectedRoom = filterRuangan.value;
-                const filteredAssets = selectedRoom ? assets.filter(a => a.lokasi === selectedRoom) : assets;
-
-                if (filteredAssets.length === 0) {
-                    assetSelect.innerHTML = `<option value="">-- Tidak ada aset tersedia di ruangan ini --</option>`;
-                } else {
-                    assetSelect.innerHTML = `<option value="">-- Pilih Barang di ${selectedRoom ? 'Ruangan '+selectedRoom : 'Semua Lokasi'} --</option>` +
-                        filteredAssets.map(a => `<option value="${a.id}" ${editData?.assetId === a.id ? 'selected' : ''}>${a.nama} (${a.merk}) | Stok: ${a.jumlah} | Lokasi: ${a.lokasi}</option>`).join('');
-                }
-            };
-
-            // Event listener saat filter ruangan dirubah
-            filterRuangan.addEventListener('change', updateAssetOptions);
-            
-            // Set default value jika mode edit
-            if (editData && editData.dari) {
-                filterRuangan.value = editData.dari;
-            }
-            updateAssetOptions(); // Panggilan pertama kali
-
-            if (!editData) {
-                document.getElementById('mutasi-tanggal').value = new Date().toISOString().split('T')[0];
-            }
-
             const tipeSelect = document.getElementById('mutasi-tipe');
-            const keContainer = document.getElementById('mutasi-ke-container');
-            tipeSelect.onchange = () => {
-                keContainer.style.display = (tipeSelect.value === 'Mutasi') ? 'block' : 'none';
+            const divTujuan = document.getElementById('div-tujuan');
+            tipeSelect.onchange = (e) => {
+                if (e.target.value === 'Rusak') {
+                    divTujuan.style.display = 'none';
+                } else {
+                    divTujuan.style.display = 'block';
+                }
             };
 
             document.getElementById('form-mutasi').onsubmit = async (e) => {
                 e.preventDefault();
                 if (!user) return;
 
-                const assetId = document.getElementById('mutasi-asset-id').value;
-                if(!assetId) return showToast("Harap pilih barang terlebih dahulu!", "warning");
-                
+                const assetId = document.getElementById('mutasi-aset').value;
                 const asset = assets.find(a => a.id === assetId);
-                const jumlah = parseInt(document.getElementById('mutasi-jumlah').value);
+                if (!asset) return;
+
                 const tipe = document.getElementById('mutasi-tipe').value;
-                const ke = document.getElementById('mutasi-ke').value;
-                const keterangan = document.getElementById('mutasi-keterangan').value;
-                const tanggalMutasi = document.getElementById('mutasi-tanggal').value;
-
-                if (!editData && jumlah > asset.jumlah) return showToast("Jumlah melebihi stok yang tersedia!", "warning");
-                if (tipe === 'Mutasi' && !ke) return showToast("Harap pilih ruangan tujuan!", "warning");
-                if (tipe === 'Mutasi' && ke === asset.lokasi) return showToast("Ruangan tujuan tidak boleh sama dengan ruangan asal!", "warning");
-
-                const btn = document.getElementById('btn-save-mutasi');
-                btn.disabled = true;
-                btn.innerHTML = '<div class="loader mx-auto"></div>';
+                const tujuan = tipe === 'Rusak' ? 'Unit Kerusakan / Perbaikan' : document.getElementById('mutasi-tujuan').value;
+                const tanggal = document.getElementById('mutasi-tanggal').value || new Date().toISOString().split('T')[0];
+                const ket = document.getElementById('mutasi-ket').value;
 
                 try {
-                    if (editData) {
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mutations', editData.id), {
-                            assetId,
-                            namaBarang: asset.nama,
-                            merk: asset.merk,
-                            tipe,
-                            jumlah,
-                            dari: asset.lokasi,
-                            ke: tipe === 'Mutasi' ? ke : '-',
-                            keterangan,
-                            tanggalMutasi,
+                    // Update asset location if mutation
+                    if (tipe === 'Mutasi' && tujuan) {
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', assetId), {
+                            lokasi: tujuan,
                             updatedAt: serverTimestamp()
                         });
-                        showToast("Catatan mutasi berhasil diperbarui!");
-                    } else {
-                        const newOldStock = asset.jumlah - jumlah;
-                        if (newOldStock === 0) {
-                            if (tipe === 'Mutasi') {
-                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', asset.id), {
-                                    lokasi: ke,
-                                    jumlah: jumlah
-                                });
-                            } else {
-                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', asset.id), { jumlah: 0 });
-                            }
-                        } else {
-                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', asset.id), { jumlah: newOldStock });
-                            
-                            if (tipe === 'Mutasi') {
-                                const existingInNewRoom = assets.find(a => a.nama === asset.nama && a.merk === asset.merk && a.lokasi === ke);
-                                if (existingInNewRoom) {
-                                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assets', existingInNewRoom.id), {
-                                        jumlah: existingInNewRoom.jumlah + jumlah
-                                    });
-                                } else {
-                                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), {
-                                        ...asset,
-                                        id: undefined,
-                                        jumlah: jumlah,
-                                        lokasi: ke,
-                                        createdAt: serverTimestamp()
-                                    });
-                                }
-                            }
-                        }
-
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), {
-                            assetId: asset.id,
-                            namaBarang: asset.nama,
-                            merk: asset.merk,
-                            tipe,
-                            jumlah,
-                            dari: asset.lokasi,
-                            ke: tipe === 'Mutasi' ? ke : '-',
-                            keterangan,
-                            tanggalMutasi: tanggalMutasi,
-                            createdAt: serverTimestamp()
-                        });
-                        showToast("Mutasi Berhasil diproses!");
                     }
 
+                    // Save mutation record
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'mutations'), {
+                        namaBarang: asset.nama,
+                        kodeBarang: asset.kode || '-',
+                        tipe: tipe,
+                        dari: asset.lokasi,
+                        ke: tujuan,
+                        keterangan: ket,
+                        tanggalMutasi: tanggal,
+                        createdAt: serverTimestamp()
+                    });
+
+                    showToast("Mutasi / Transaksi berhasil disimpan!");
                     switchTab('db-mutasi');
                 } catch (err) {
-                    console.error(err);
-                    showToast("Gagal memproses mutasi", "error");
-                    btn.disabled = false;
-                    btn.innerText = editData ? "Update Catatan Status / Mutasi" : "Proses Perubahan Status";
+                    console.error("Gagal simpan mutasi:", err);
+                    showToast("Gagal menyimpan mutasi.", "error");
                 }
             };
         };
 
         const renderDBMutasi = (container) => {
             container.innerHTML = `
-                <div class="flex flex-col md:flex-row gap-4 mb-6">
-                    <div class="flex-1 relative">
-                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                        <input type="text" id="mut-search" placeholder="Cari barang, tipe, atau lokasi..." class="w-full pl-12 pr-4 py-3 bg-white rounded-xl shadow-sm outline-none focus:ring-2 focus:ring-sky-500 transition">
+                <div class="card-glass p-8 rounded-[2.5rem] space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h4 class="font-bold text-gray-800">Riwayat Mutasi & Perubahan Aset</h4>
+                        <button onclick="window.print()" class="px-5 py-3 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition text-sm flex items-center gap-2">
+                            <i class="fas fa-print"></i> Cetak Riwayat
+                        </button>
                     </div>
-                    <button onclick="exportMutationsToPDF()" class="bg-sky-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-sky-700 transition flex items-center gap-2">
-                        <i class="fas fa-print"></i> Cetak PDF Riwayat
-                    </button>
-                </div>
-
-                <div class="card-glass rounded-[2rem] overflow-hidden">
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left">
+                        <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="bg-sky-900/5 text-sky-900 border-b border-sky-100">
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider">Tanggal</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider">Barang</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Tipe</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider">Pergerakan</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Qty</th>
-                                    <th class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-right">Aksi</th>
+                                <tr class="border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wider">
+                                    <th class="py-4 px-4">Tanggal</th>
+                                    <th class="py-4 px-4">Barang</th>
+                                    <th class="py-4 px-4">Tipe</th>
+                                    <th class="py-4 px-4">Perpindahan / Status</th>
+                                    <th class="py-4 px-4">Keterangan</th>
                                 </tr>
                             </thead>
-                            <tbody id="mut-table-body" class="divide-y divide-gray-100">
-                                ${renderMutationsTableRows(mutations)}
+                            <tbody class="divide-y divide-gray-50 text-sm">
+                                ${mutations.length > 0 ? mutations.map(m => `
+                                    <tr class="hover:bg-sky-50/40 transition">
+                                        <td class="py-4 px-4 font-semibold text-gray-600">${m.tanggalMutasi || '-'}</td>
+                                        <td class="py-4 px-4 font-bold text-gray-800">${m.namaBarang}</td>
+                                        <td class="py-4 px-4"><span class="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-xs font-bold">${m.tipe}</span></td>
+                                        <td class="py-4 px-4 text-gray-600">${m.dari} → ${m.ke}</td>
+                                        <td class="py-4 px-4 text-gray-500">${m.keterangan}</td>
+                                    </tr>
+                                `).join('') : `<tr><td colspan="5" class="py-8 text-center text-gray-400">Belum ada riwayat mutasi.</td></tr>`}
                             </tbody>
                         </table>
                     </div>
                 </div>
             `;
-
-            document.getElementById('mut-search').oninput = (e) => {
-                const term = e.target.value.toLowerCase();
-                const filtered = mutations.filter(m => 
-                    m.namaBarang.toLowerCase().includes(term) || 
-                    m.merk.toLowerCase().includes(term) || 
-                    m.dari.toLowerCase().includes(term) ||
-                    m.ke.toLowerCase().includes(term) ||
-                    m.tipe.toLowerCase().includes(term)
-                );
-                document.getElementById('mut-table-body').innerHTML = renderMutationsTableRows(filtered);
-            };
-        };
-
-        const renderMutationsTableRows = (dataList) => {
-            if (dataList.length === 0) return '<tr><td colspan="6" class="p-12 text-center text-gray-400">Belum ada riwayat mutasi.</td></tr>';
-            
-            return dataList.map(m => `
-                <tr class="hover:bg-sky-50/30 transition">
-                    <td class="px-6 py-4 text-xs text-gray-500">${m.tanggalMutasi ? new Date(m.tanggalMutasi).toLocaleDateString('id-ID') : new Date(m.createdAt?.seconds * 1000).toLocaleDateString('id-ID')}</td>
-                    <td class="px-6 py-4">
-                        <p class="font-bold text-gray-800 text-sm">${m.namaBarang}</p>
-                        <p class="text-[10px] text-gray-400">${m.merk}</p>
-                    </td>
-                    <td class="px-6 py-4 text-center">
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold ${m.tipe === 'Mutasi' ? 'bg-amber-100 text-amber-700' : m.tipe === 'Rusak' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}">
-                            ${m.tipe}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-xs">
-                        <div class="flex items-center gap-2">
-                            <span class="font-bold text-gray-600">${m.dari}</span>
-                            <i class="fas fa-arrow-right text-[10px] text-gray-300"></i>
-                            <span class="font-bold text-sky-600">${m.ke}</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 text-center font-bold">${m.jumlah}</td>
-                    <td class="px-6 py-4 text-right flex items-center justify-end gap-1">
-                        ${m.tipe === 'Rusak' ? `<button onclick="cetakBaKerusakanLangsung('${m.id}')" class="bg-sky-600 text-white px-2 py-1 rounded-lg text-xs font-bold hover:bg-sky-700 transition" title="Cetak Berita Acara"><i class="fas fa-print"></i> BA</button>` : ''}
-                        <button onclick="editMutation('${m.id}')" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition" title="Edit Riwayat"><i class="fas fa-edit"></i></button>
-                        <button onclick="deleteMutationConfirm('${m.id}')" class="text-red-400 hover:text-red-600 transition p-2" title="Hapus Riwayat"><i class="fas fa-trash"></i></button>
-                    </td>
-                </tr>
-            `).join('');
-        };
-
-        window.editMutation = (id) => {
-            const data = mutations.find(m => m.id === id);
-            if (data) {
-                switchTab('input-mutasi');
-                renderInputMutasi(document.getElementById('content-container'), data);
-                document.getElementById('tab-title').innerText = "Edit Status / Riwayat Mutasi";
-            }
-        };
-
-        window.deleteMutationConfirm = (id) => {
-            customConfirm(
-                "Hapus Riwayat Mutasi", 
-                "Apakah Anda yakin ingin menghapus catatan mutasi ini? Tindakan ini tidak akan mengembalikan jumlah stok fisik barang.", 
-                async () => {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'mutations', id));
-                    showToast("Catatan mutasi berhasil dihapus");
-                }, 
-                "danger"
-            );
         };
 
         const renderLacakBarang = (container) => {
             container.innerHTML = `
-                <div class="card-glass p-6 rounded-3xl mb-6 shadow-sm border border-white/50">
-                    <h4 class="font-bold text-sky-900 mb-4 flex items-center gap-2"><i class="fas fa-search-location text-sky-500"></i> Filter Pelacakan Riwayat Aset</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Filter Ruangan (Saat Ini)</label>
-                            <select id="lacak-ruangan" class="w-full p-3.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none transition text-sm text-gray-700 font-medium">
-                                <option value="">Semua Ruangan</option>
-                                ${rooms.map(r => `<option value="${r.nama}">${r.nama}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="space-y-2">
-                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Pilih Alat / Aset</label>
-                            <select id="lacak-alat" class="w-full p-3.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none transition text-sm text-gray-700 font-medium">
-                                <option value="">-- Silakan Pilih Aset --</option>
-                                ${assets.map(a => `<option value="${a.id}">${a.nama} (${a.merk}) - [${a.lokasi}]</option>`).join('')}
-                            </select>
+                <div class="max-w-4xl mx-auto space-y-8">
+                    <div class="card-glass p-8 rounded-[2.5rem] space-y-6">
+                        <h3 class="text-xl font-bold text-gray-800">Lacak Riwayat Barang Berdasarkan Kode / SN</h3>
+                        <div class="flex gap-4">
+                            <input type="text" id="lacak-input" placeholder="Masukkan Kode Inventaris / SN..." class="flex-1 p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
+                            <button id="btn-lacak" class="px-8 bg-sky-600 text-white font-bold rounded-2xl hover:bg-sky-700 transition">Lacak</button>
                         </div>
                     </div>
-                </div>
-                <div id="lacak-result" class="transition-all duration-300">
-                    <div class="text-center p-16 card-glass rounded-3xl border border-dashed border-gray-300 bg-gray-50/30 flex flex-col items-center justify-center">
-                        <i class="fas fa-route text-4xl text-gray-300 mb-4"></i>
-                        <p class="text-gray-500 font-medium text-sm">Silakan pilih nama alat pada filter di atas untuk melihat riwayat perjalanan aset dari awal pembelian hingga mutasi terakhir.</p>
-                    </div>
+                    <div id="lacak-hasil" class="space-y-6"></div>
                 </div>
             `;
 
-            const ruanganSelect = document.getElementById('lacak-ruangan');
-            const alatSelect = document.getElementById('lacak-alat');
-            const resultDiv = document.getElementById('lacak-result');
+            document.getElementById('btn-lacak').onclick = () => {
+                const queryCode = document.getElementById('lacak-input').value.trim().toLowerCase();
+                const hasilDiv = document.getElementById('lacak-hasil');
+                if (!queryCode) return;
 
-            ruanganSelect.onchange = () => {
-                const selectedRoom = ruanganSelect.value;
-                const filteredAssets = selectedRoom ? assets.filter(a => a.lokasi === selectedRoom) : assets;
-                
-                alatSelect.innerHTML = `<option value="">-- Silakan Pilih Aset --</option>` + 
-                    filteredAssets.map(a => `<option value="${a.id}">${a.nama} (${a.merk}) - [${a.lokasi}]</option>`).join('');
-                
-                resultDiv.innerHTML = `
-                    <div class="text-center p-16 card-glass rounded-3xl border border-dashed border-gray-300 bg-gray-50/30 flex flex-col items-center justify-center">
-                        <i class="fas fa-route text-4xl text-gray-300 mb-4"></i>
-                        <p class="text-gray-500 font-medium text-sm">Silakan pilih nama alat pada filter di atas untuk melihat riwayat perjalanan aset dari awal pembelian hingga mutasi terakhir.</p>
-                    </div>
-                `;
-            };
+                const matchedAsset = assets.find(a => (a.kode && a.kode.toLowerCase().includes(queryCode)) || a.nama.toLowerCase().includes(queryCode));
+                const matchedMutations = mutations.filter(m => (m.kodeBarang && m.kodeBarang.toLowerCase().includes(queryCode)) || m.namaBarang.toLowerCase().includes(queryCode));
 
-            alatSelect.onchange = () => {
-                const assetId = alatSelect.value;
-                if (!assetId) {
-                    resultDiv.innerHTML = `
-                        <div class="text-center p-16 card-glass rounded-3xl border border-dashed border-gray-300 bg-gray-50/30 flex flex-col items-center justify-center">
-                            <i class="fas fa-route text-4xl text-gray-300 mb-4"></i>
-                            <p class="text-gray-500 font-medium text-sm">Silakan pilih nama alat pada filter di atas untuk melihat riwayat perjalanan aset dari awal pembelian hingga mutasi terakhir.</p>
-                        </div>
-                    `;
+                if (!matchedAsset && matchedMutations.length === 0) {
+                    hasilDiv.innerHTML = `<div class="card-glass p-8 rounded-3xl text-center text-red-600 font-bold">Barang dengan kata kunci tersebut tidak ditemukan.</div>`;
                     return;
                 }
 
-                const asset = assets.find(a => a.id === assetId);
-                // Sort history by date descending (newest first)
-                const history = mutations.filter(m => m.assetId === assetId).sort((a, b) => {
-                    const dateA = a.tanggalMutasi ? new Date(a.tanggalMutasi) : new Date(a.createdAt?.seconds * 1000);
-                    const dateB = b.tanggalMutasi ? new Date(b.tanggalMutasi) : new Date(b.createdAt?.seconds * 1000);
-                    return dateB - dateA; 
-                });
-
-                let timelineHTML = `
-                    <div class="card-glass p-8 rounded-[2rem] shadow-lg shadow-sky-900/5">
-                        <div class="flex items-start md:items-center gap-5 mb-8 bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
-                            <div class="w-20 h-20 rounded-2xl bg-white shadow-sm flex items-center justify-center text-sky-500 text-3xl shrink-0 overflow-hidden border border-gray-100">
-                                ${asset.foto ? `<img src="${asset.foto}" class="w-full h-full object-cover">` : `<i class="fas fa-box-open"></i>`}
+                hasilDiv.innerHTML = `
+                    <div class="card-glass p-8 rounded-[2.5rem] space-y-6">
+                        <h4 class="font-bold text-gray-800 text-lg">Hasil Pelacakan: ${matchedAsset?.nama || queryCode}</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div class="bg-gray-50 p-4 rounded-2xl">
+                                <p class="text-xs text-gray-400">Kode / SN</p>
+                                <p class="font-bold font-mono text-sky-600 mt-1">${matchedAsset?.kode || queryCode}</p>
                             </div>
-                            <div class="flex-1">
-                                <div class="flex flex-wrap items-center gap-2 mb-1">
-                                    <h3 class="font-bold text-2xl text-gray-800">${asset.nama}</h3>
-                                    <span class="px-2.5 py-0.5 bg-sky-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wider">${asset.merk}</span>
-                                </div>
-                                <p class="text-sm text-gray-500 mb-2">Kode / SN: <span class="font-mono text-gray-700 bg-white px-2 py-0.5 rounded border border-gray-200">${asset.kode || 'Tidak Ada SN'}</span></p>
-                                <div class="flex flex-wrap gap-3">
-                                    <span class="text-xs bg-white text-gray-600 px-3 py-1 rounded-lg border border-gray-200 font-medium"><i class="fas fa-map-marker-alt text-red-500 mr-1.5"></i>Lokasi Saat Ini: <b class="text-gray-800">${asset.lokasi}</b></span>
-                                    <span class="text-xs bg-white text-gray-600 px-3 py-1 rounded-lg border border-gray-200 font-medium"><i class="fas fa-boxes text-amber-500 mr-1.5"></i>Sisa Stok: <b class="text-gray-800">${asset.jumlah}</b></span>
-                                </div>
+                            <div class="bg-gray-50 p-4 rounded-2xl">
+                                <p class="text-xs text-gray-400">Lokasi Saat Ini</p>
+                                <p class="font-bold text-gray-800 mt-1">${matchedAsset?.lokasi || '-'}</p>
+                            </div>
+                            <div class="bg-gray-50 p-4 rounded-2xl">
+                                <p class="text-xs text-gray-400">Total Mutasi Tercatat</p>
+                                <p class="font-bold text-gray-800 mt-1">${matchedMutations.length} Transaksi</p>
                             </div>
                         </div>
-                        
-                        <h5 class="font-bold text-gray-800 mb-6 flex items-center gap-2"><i class="fas fa-history text-sky-600"></i> Timeline Riwayat Aset</h5>
-                        <div class="relative border-l-2 border-sky-200 ml-4 space-y-8 pb-6">
-                `;
 
-                history.forEach(h => {
-                    const dateStr = h.tanggalMutasi ? new Date(h.tanggalMutasi).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : (h.createdAt ? new Date(h.createdAt.seconds * 1000).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : 'Tanggal Tidak Diketahui');
-                    let icon = "fa-exchange-alt";
-                    let color = "text-amber-500";
-                    let bg = "bg-amber-100";
-                    let borderColor = "border-amber-200";
-                    let desc = `Barang dimutasi dari ruang <b class="text-gray-800">${h.dari}</b> ke ruang <b class="text-gray-800">${h.ke}</b>.`;
-                    
-                    if (h.tipe === 'Rusak') {
-                        icon = "fa-exclamation-triangle";
-                        color = "text-red-500";
-                        bg = "bg-red-100";
-                        borderColor = "border-red-200";
-                        desc = `Barang dilaporkan mengalami kerusakan di ruang <b class="text-gray-800">${h.dari}</b>.`;
-                    } else if (h.tipe === 'Dipinjam') {
-                        icon = "fa-hand-holding";
-                        color = "text-blue-500";
-                        bg = "bg-blue-100";
-                        borderColor = "border-blue-200";
-                        desc = `Barang dipinjam dari ruang <b class="text-gray-800">${h.dari}</b>.`;
-                    }
-
-                    timelineHTML += `
-                        <div class="relative pl-8 group">
-                            <div class="absolute -left-[17px] top-1.5 w-8 h-8 rounded-full ${bg} border-4 border-white flex items-center justify-center ${color} z-10 shadow-sm transition-transform group-hover:scale-110">
-                                <i class="fas ${icon} text-xs"></i>
-                            </div>
-                            <div class="bg-white p-5 rounded-2xl border ${borderColor} hover:shadow-md transition duration-300 relative overflow-hidden">
-                                <div class="absolute top-0 left-0 w-1 h-full ${bg.replace('100', '400')}"></div>
-                                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 gap-1">
-                                    <span class="font-bold text-gray-800 text-sm uppercase tracking-wide flex items-center gap-2">${h.tipe} <span class="bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md text-[10px] normal-case tracking-normal">Qty: ${h.jumlah}</span></span>
-                                    <span class="text-xs text-sky-600 font-bold bg-sky-50 px-2.5 py-1 rounded-lg"><i class="far fa-calendar-alt mr-1"></i>${dateStr}</span>
+                        <h5 class="font-bold text-gray-800 pt-4">Linimasa Riwayat Barang</h5>
+                        <div class="space-y-4 relative before:content-[''] before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
+                            ${matchedMutations.map(m => `
+                                <div class="flex gap-4 relative">
+                                    <div class="w-10 h-10 rounded-full bg-white border-2 border-sky-500 flex items-center justify-center text-sky-600 z-10 shrink-0">
+                                        <i class="fas fa-history text-xs"></i>
+                                    </div>
+                                    <div class="flex-1 bg-gray-50/50 rounded-2xl p-4">
+                                        <p class="text-sm font-bold text-gray-800">${m.tipe}: ${m.dari} → ${m.ke}</p>
+                                        <p class="text-xs text-gray-600 mt-1">${m.keterangan}</p>
+                                        <p class="text-[10px] text-gray-400 mt-1">Tanggal: ${m.tanggalMutasi || '-'}</p>
+                                    </div>
                                 </div>
-                                <p class="text-sm text-gray-600 mb-3">${desc}</p>
-                                ${h.keterangan ? `<div class="text-xs text-gray-700 bg-gray-50/80 p-3 rounded-xl border border-gray-100 italic flex items-start gap-2"><i class="fas fa-quote-left text-gray-300 mt-0.5"></i> ${h.keterangan}</div>` : ''}
-                            </div>
-                        </div>
-                    `;
-                });
-
-                // Add purchase / initial entry at the bottom
-                const purchaseDateStr = asset.tanggal ? new Date(asset.tanggal).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : '-';
-                timelineHTML += `
-                    <div class="relative pl-8 group">
-                        <div class="absolute -left-[17px] top-1.5 w-8 h-8 rounded-full bg-emerald-100 border-4 border-white flex items-center justify-center text-emerald-600 z-10 shadow-sm transition-transform group-hover:scale-110">
-                            <i class="fas fa-shopping-cart text-xs"></i>
-                        </div>
-                        <div class="bg-emerald-50/30 p-5 rounded-2xl border border-emerald-200 relative overflow-hidden">
-                            <div class="absolute top-0 left-0 w-1 h-full bg-emerald-400"></div>
-                            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 gap-1">
-                                <span class="font-bold text-emerald-800 text-sm uppercase tracking-wide">Pembelian / Input Awal</span>
-                                <span class="text-xs text-emerald-600 font-bold bg-emerald-100/50 px-2.5 py-1 rounded-lg"><i class="far fa-calendar-alt mr-1"></i>${purchaseDateStr}</span>
-                            </div>
-                            <p class="text-sm text-gray-600 mb-3">Barang berhasil masuk ke dalam sistem inventaris RSU Dadi Keluarga.</p>
-                            <div class="grid grid-cols-2 gap-2 mt-2">
-                                <div class="text-xs text-gray-600 bg-white p-2.5 rounded-xl border border-emerald-100 flex items-center gap-2"><i class="fas fa-building text-emerald-500"></i> Vendor: <b>${asset.vendor || '-'}</b></div>
-                                <div class="text-xs text-gray-600 bg-white p-2.5 rounded-xl border border-emerald-100 flex items-center gap-2"><i class="fas fa-tag text-emerald-500"></i> Harga: <b>Rp ${parseInt(asset.harga).toLocaleString()}</b></div>
-                            </div>
+                            `).join('')}
                         </div>
                     </div>
                 `;
-
-                timelineHTML += `
-                        </div>
-                    </div>
-                `;
-
-                resultDiv.innerHTML = timelineHTML;
             };
         };
 
         const renderBeritaAcara = (container) => {
             container.innerHTML = `
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                    <!-- Form Generator -->
-                    <div class="lg:col-span-1">
-                        <form id="form-ba-rusak" class="card-glass p-6 rounded-[2rem] space-y-4">
-                            <h4 class="font-bold text-sky-900 border-b pb-2 mb-4"><i class="fas fa-print mr-2"></i>Buat Berita Acara</h4>
-                            
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-gray-700">Pilih Aset Terdaftar <span class="text-red-500">*</span></label>
-                                <select id="ba-asset-id" required class="w-full p-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-sm">
-                                    <option value="">-- Pilih Aset --</option>
-                                    ${assets.map(a => `<option value="${a.id}">${a.nama} (${a.merk}) - [Kode: ${a.kode || 'N/A'}]</option>`).join('')}
+                <div class="max-w-4xl mx-auto card-glass p-10 rounded-[2.5rem] space-y-6">
+                    <h3 class="text-xl font-bold text-gray-800">Generator Berita Acara Kerusakan / Penghapusan Aset</h3>
+                    <form id="form-ba" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="text-sm font-bold text-gray-700">Nomor Surat BA</label>
+                                <input type="text" id="ba-nomor" required value="BA/${new Date().getFullYear()}/RSDK/..." class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-bold text-gray-700">Pilih Aset Rusak</label>
+                                <select id="ba-aset" required class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
+                                    <option value="">Pilih Barang</option>
+                                    ${assets.map(a => `<option value="${a.nama} (${a.merk}) - ${a.kode}">${a.nama} - ${a.merk}</option>`).join('')}
                                 </select>
-                            </div>
-
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-gray-700">Tanggal Temuan Kerusakan <span class="text-red-500">*</span></label>
-                                <input type="date" id="ba-tanggal" required class="w-full p-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-sm">
-                            </div>
-
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-gray-700">Jenis/Klasifikasi Kerusakan <span class="text-red-500">*</span></label>
-                                <select id="ba-jenis-kerusakan" required class="w-full p-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-sm">
-                                    <option value="Rusak Ringan">Rusak Ringan (Bisa Diperbaiki Cepat)</option>
-                                    <option value="Rusak Sedang">Rusak Sedang (Perlu Suku Cadang)</option>
-                                    <option value="Rusak Berat / Total">Rusak Berat / Total (Tidak Layak Pakai)</option>
-                                </select>
-                            </div>
-
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-gray-700">Kronologi & Detail Kerusakan <span class="text-red-500">*</span></label>
-                                <textarea id="ba-detail" required rows="3" placeholder="Sebutkan kendala teknis / kronologi..." class="w-full p-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none text-sm"></textarea>
-                            </div>
-
-                            <p class="text-[10px] uppercase tracking-widest text-sky-700 font-bold mt-2">Daftar Penandatangan</p>
-
-                            <div class="space-y-1">
-                                <label class="text-[11px] font-bold text-gray-600">Kepala Ruang (Penanggung Jawab)</label>
-                                <input type="text" id="ba-sign-kepala" required value="Nama Lengkap" class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
-                            </div>
-
-                            <div class="space-y-1">
-                                <label class="text-[11px] font-bold text-gray-600">Koordinator Rumah Tangga</label>
-                                <input type="text" id="ba-sign-koor" required value="SUTOMO" class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
-                            </div>
-
-                            <div class="space-y-1">
-                                <label class="text-[11px] font-bold text-gray-600">Manager Umum</label>
-                                <input type="text" id="ba-sign-manager" required value="Nama Lengkap" class="w-full p-2.5 bg-gray-50 border-0 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none text-xs">
-                            </div>
-
-                            <button type="submit" class="w-full bg-sky-600 text-white font-bold py-3 rounded-xl hover:bg-sky-700 transition active:scale-[0.98] shadow-lg shadow-sky-100 flex items-center justify-center gap-2 text-sm">
-                                <i class="fas fa-file-pdf"></i> Cetak Berita Acara PDF
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- DB Damage Listings -->
-                    <div class="lg:col-span-2 space-y-6">
-                        <div class="card-glass p-6 rounded-[2rem]">
-                            <h4 class="font-bold text-gray-800 mb-4"><i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>Aset Rusak Terdaftar di Database</h4>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left text-xs">
-                                    <thead>
-                                        <tr class="bg-gray-100 text-gray-700">
-                                            <th class="p-3">Tanggal Lapor</th>
-                                            <th class="p-3">Nama Alat</th>
-                                            <th class="p-3">Kode/SN</th>
-                                            <th class="p-3">Lokasi</th>
-                                            <th class="p-3 text-center">Cetak</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-100">
-                                        ${mutations.filter(m => m.tipe === 'Rusak').length === 0 ? '<tr><td colspan="5" class="p-8 text-center text-gray-400">Belum ada riwayat kerusakan dilaporkan di mutasi.</td></tr>' : 
-                                          mutations.filter(m => m.tipe === 'Rusak').map(m => {
-                                            const originalAsset = assets.find(a => a.id === m.assetId) || {};
-                                            return `
-                                                <tr class="hover:bg-sky-50/20 transition">
-                                                    <td class="p-3 text-gray-500">${m.tanggalMutasi ? new Date(m.tanggalMutasi).toLocaleDateString('id-ID') : new Date(m.createdAt?.seconds * 1000).toLocaleDateString('id-ID')}</td>
-                                                    <td class="p-3 font-bold text-gray-800">${m.namaBarang}</td>
-                                                    <td class="p-3 font-mono">${originalAsset.kode || '-'}</td>
-                                                    <td class="p-3"><span class="px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-bold text-[9px]">${m.dari}</span></td>
-                                                    <td class="p-3 text-center">
-                                                        <button onclick="pilihAsetRusakUntukCetak('${m.id}')" class="bg-sky-100 text-sky-800 px-3 py-1 rounded-lg hover:bg-sky-200 transition font-bold text-[10px]">
-                                                            Gunakan Data
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            `;
-                                          }).join('')}
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-bold text-gray-700">Uraian Kerusakan & Tindak Lanjut</label>
+                            <textarea id="ba-uraian" required rows="4" placeholder="Jelaskan kondisi kerusakan alat secara rinci..." class="w-full p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none"></textarea>
+                        </div>
+                        <div class="flex gap-4">
+                            <button type="submit" class="flex-1 bg-sky-600 text-white font-bold py-4 rounded-2xl hover:bg-sky-700 transition">Cetak Berita Acara (PDF)</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            document.getElementById('form-ba').onsubmit = (e) => {
+                e.preventDefault();
+                const nomor = document.getElementById('ba-nomor').value;
+                const barang = document.getElementById('ba-aset').value;
+                const uraian = document.getElementById('ba-uraian').value;
+
+                const { jsPDF } = window.jspdf;
+                const docPdf = new jsPDF();
+
+                docPdf.setFont("Helvetica", "bold");
+                docPdf.setFontSize(14);
+                docPdf.text("RSU DADI KELUARGA", 105, 20, { align: "center" });
+                docPdf.setFontSize(11);
+                docPdf.text("BERITA ACARA KERUSAKAN ASET / ALAT MEDIS", 105, 28, { align: "center" });
+                docPdf.setFontSize(10);
+                docPdf.setFont("Helvetica", "normal");
+                docPdf.text(`Nomor: ${nomor}`, 105, 35, { align: "center" });
+
+                docPdf.line(20, 42, 190, 42);
+
+                docPdf.text(`Pada hari ini tanggal ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}, telah dilaporkan kerusakan aset rumah sakit dengan detail sebagai berikut:`, 20, 52, { maxWidth: 170 });
+
+                docPdf.setFont("Helvetica", "bold");
+                docPdf.text(`Nama Barang / Aset: ${barang}`, 20, 68);
+                docPdf.text(`Uraian Kerusakan:`, 20, 78);
+                docPdf.setFont("Helvetica", "normal");
+                docPdf.text(uraian, 20, 86, { maxWidth: 170 });
+
+                docPdf.text("Demikian Berita Acara ini dibuat untuk dipergunakan sebagaimana mestinya.", 20, 120, { maxWidth: 170 });
+
+                docPdf.text("Mengetahui,", 30, 145);
+                docPdf.text("Kepala Rumah Tangga", 30, 152);
+                docPdf.text("( .................................... )", 30, 180);
+
+                docPdf.text("Teknisi / Pelapor,", 130, 145);
+                docPdf.text("Bagian Aset RSDK", 130, 152);
+                docPdf.text("( .................................... )", 130, 180);
+
+                docPdf.save(`Berita_Acara_${nomor.replace(/[/\\?%*:|"<>]/g, '-')}.pdf`);
+                showToast("Berita Acara berhasil di-generate!");
+            };
+        };
+
+        const renderImportExport = (container) => {
+            container.innerHTML = `
+                <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card-glass p-8 rounded-[2.5rem] space-y-6 text-center">
+                        <div class="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl mx-auto">
+                            <i class="fas fa-file-excel"></i>
+                        </div>
+                        <h4 class="font-bold text-gray-800 text-lg">Export Data ke Excel</h4>
+                        <p class="text-xs text-gray-500">Unduh seluruh database aset rumah sakit ke dalam format spreadsheet Excel.</p>
+                        <button onclick="exportToExcel()" class="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition">Download Excel</button>
+                    </div>
+
+                    <div class="card-glass p-8 rounded-[2.5rem] space-y-6 text-center">
+                        <div class="w-16 h-16 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center text-2xl mx-auto">
+                            <i class="fas fa-file-upload"></i>
+                        </div>
+                        <h4 class="font-bold text-gray-800 text-lg">Import Data dari Excel</h4>
+                        <p class="text-xs text-gray-500">Upload file Excel (.xlsx) untuk menambahkan data aset secara massal.</p>
+                        <input type="file" id="excel-file-input" accept=".xlsx, .xls" class="hidden">
+                        <button onclick="document.getElementById('excel-file-input').click()" class="w-full py-4 bg-sky-600 text-white font-bold rounded-2xl hover:bg-sky-700 transition">Pilih File Excel</button>
                     </div>
                 </div>
             `;
 
-            document.getElementById('ba-tanggal').value = new Date().toISOString().split('T')[0];
+            document.getElementById('excel-file-input').onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
 
-            document.getElementById('form-ba-rusak').onsubmit = (e) => {
-                e.preventDefault();
-                const assetId = document.getElementById('ba-asset-id').value;
-                const asset = assets.find(a => a.id === assetId);
-                
-                if (!asset) return showToast("Pilih aset terlebih dahulu!", "warning");
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const data = new Uint8Array(event.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet);
 
-                const reportData = {
-                    nama: asset.nama,
-                    merk: asset.merk,
-                    kode: asset.kode || '-',
-                    lokasi: asset.lokasi,
-                    tanggal: document.getElementById('ba-tanggal').value,
-                    tanggalBeli: asset.tanggal || '-',
-                    jenisKerusakan: document.getElementById('ba-jenis-kerusakan').value,
-                    detail: document.getElementById('ba-detail').value,
-                    signKepala: document.getElementById('ba-sign-kepala').value,
-                    signKoor: document.getElementById('ba-sign-koor').value,
-                    signManager: document.getElementById('ba-sign-manager').value
+                        for (const item of json) {
+                            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assets'), {
+                                nama: item.Nama || item.nama || 'Tanpa Nama',
+                                merk: item.Merk || item.merk || '-',
+                                kode: item.Kode || item.kode || `AST-${Date.now().toString().slice(-6)}`,
+                                tanggal: item.Tanggal || item.tanggal || new Date().toISOString().split('T')[0],
+                                jumlah: parseInt(item.Jumlah || item.jumlah) || 1,
+                                harga: parseFloat(item.Harga || item.harga) || 0,
+                                lokasi: item.Lokasi || item.lokasi || 'Gudang Utama',
+                                vendor: item.Vendor || item.vendor || '-',
+                                foto: '',
+                                createdAt: serverTimestamp(),
+                                updatedAt: serverTimestamp()
+                            });
+                        }
+                        showToast(`Berhasil import ${json.length} data aset!`);
+                        switchTab('database');
+                    } catch (err) {
+                        console.error("Import Error:", err);
+                        showToast("Gagal memproses file Excel.", "error");
+                    }
                 };
-
-                exportBeritaAcaraPDF(reportData);
+                reader.readAsArrayBuffer(file);
             };
         };
 
-        window.pilihAsetRusakUntukCetak = (mutationId) => {
-            const mut = mutations.find(m => m.id === mutationId);
-            if (!mut) return;
-
-            const asset = assets.find(a => a.id === mut.assetId);
-            if (asset) {
-                document.getElementById('ba-asset-id').value = asset.id;
-            }
-            document.getElementById('ba-tanggal').value = mut.tanggalMutasi || new Date().toISOString().split('T')[0];
-            document.getElementById('ba-detail').value = mut.keterangan || "";
-            showToast("Data dari database berhasil dimuat! Silakan tinjau kembali sebelum cetak.");
+        window.exportToExcel = () => {
+            const worksheet = XLSX.utils.json_to_sheet(assets.map(a => ({
+                Nama: a.nama,
+                Merk: a.merk,
+                Kode: a.kode,
+                Tanggal: a.tanggal,
+                Jumlah: a.jumlah,
+                Harga: a.harga,
+                Lokasi: a.lokasi,
+                Vendor: a.vendor
+            })));
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Database Aset");
+            XLSX.writeFile(workbook, `Database_Aset_RSDK_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast("Export Excel berhasil!");
         };
 
-        window.cetakBaKerusakanLangsung = (mutationId) => {
-            const mut = mutations.find(m => m.id === mutationId);
-            if (!mut) return;
+        const renderMasterRuangan = (container) => {
+            container.innerHTML = `
+                <div class="max-w-3xl mx-auto card-glass p-10 rounded-[2.5rem] space-y-8">
+                    <h3 class="text-xl font-bold text-gray-800">Tambah Ruangan Baru</h3>
+                    <form id="form-room" class="flex gap-4">
+                        <input type="text" id="room-name" required placeholder="Nama Ruangan (Contoh: NICU, OK, Poli Gigi)..." class="flex-1 p-4 bg-gray-50 border-0 rounded-2xl focus:ring-2 focus:ring-sky-500 transition outline-none">
+                        <button type="submit" class="px-8 bg-sky-600 text-white font-bold rounded-2xl hover:bg-sky-700 transition">Tambah</button>
+                    </form>
 
-            const asset = assets.find(a => a.id === mut.assetId) || { kode: '-', tanggal: '-' };
-            
-            const reportData = {
-                nama: mut.namaBarang,
-                merk: mut.merk,
-                kode: asset.kode || '-',
-                lokasi: mut.dari,
-                tanggal: mut.tanggalMutasi || new Date().toISOString().split('T')[0],
-                tanggalBeli: asset.tanggal || '-',
-                jenisKerusakan: "Rusak (Melalui Riwayat)",
-                detail: mut.keterangan || "Dilaporkan melalui manajemen mutasi.",
-                signKepala: "Siti Rahmawati, S.Kep.",
-                signKoor: "Adi Wijaya, S.E.",
-                signManager: "dr. H. Tomos Junior, M.M."
+                    <h4 class="font-bold text-gray-800 pt-4">Daftar Ruangan Terdaftar</h4>
+                    <div class="space-y-3">
+                        ${rooms.map(r => `
+                            <div class="flex justify-between items-center p-4 bg-gray-50 rounded-2xl">
+                                <span class="font-bold text-gray-800"><i class="fas fa-door-open text-sky-600 mr-2"></i> ${r.nama}</span>
+                                <button onclick="deleteRoom('${r.id}')" class="w-8 h-8 rounded-xl bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition flex items-center justify-center"><i class="fas fa-trash text-xs"></i></button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('form-room').onsubmit = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                const name = document.getElementById('room-name').value.trim();
+                if (!name) return;
+
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rooms'), {
+                        nama: name,
+                        createdAt: serverTimestamp()
+                    });
+                    showToast("Ruangan berhasil ditambahkan!");
+                    document.getElementById('form-room').reset();
+                } catch (err) {
+                    console.error("Gagal tambah ruangan:", err);
+                    showToast("Gagal menambah ruangan.", "error");
+                }
             };
-
-            exportBeritaAcaraPDF(reportData);
         };
 
-        const exportBeritaAcaraPDF = (data) => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
-
-            doc.setFontSize(22);
-            doc.setTextColor(0, 51, 204); 
-            doc.setFont("times", "bold");
-            doc.text("RSU DADI KELUARGA PURWOKERTO", 105, 18, { align: 'center' });
-            
-            doc.setFontSize(9);
-            doc.setTextColor(0, 51, 204); 
-            doc.setFont("times", "normal");
-            doc.text("Jl. Sultan Agung No. 8A, Teluk, Purwokerto Selatan, Kab. Banyumas", 105, 23, { align: 'center' });
-            doc.text("Telp: (0281) 6844005 • Email: info@rsudadikeluarga.co.id • Purwokerto 53145", 105, 27, { align: 'center' });
-            
-            doc.setDrawColor(0, 51, 204);
-            doc.setLineWidth(0.8);
-            doc.line(15, 30, 195, 30);
-            doc.setLineWidth(0.2);
-            doc.line(15, 31.2, 195, 31.2);
-
-            doc.setFontSize(14);
-            doc.setTextColor(0);
-            doc.setFont("helvetica", "bold");
-            doc.text("BERITA ACARA KERUSAKAN ASET NON-MEDIS", 105, 42, { align: 'center' });
-            
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "normal");
-            const rawYear = new Date(data.tanggal).getFullYear() || 2026;
-            const randomDocNo = Math.floor(Math.random() * 800) + 100;
-            doc.text(`Nomor: BA-RSDK/UM-RT/${rawYear}/${randomDocNo}`, 105, 47, { align: 'center' });
-
-            doc.setFontSize(10);
-            doc.text("Yang bertanda tangan di bawah ini menerangkan dengan sebenarnya mengenai kondisi kerusakan fisik", 15, 58);
-            doc.text("aset rumah sakit non-medis yang tertera di bawah ini:", 15, 63);
-
-            const daysArr = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-            const monthsArr = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-            
-            const dateObj = new Date(data.tanggal);
-            const dayName = daysArr[dateObj.getDay()] || "-";
-            const formattedDateStr = `${dayName}, ${dateObj.getDate()} ${monthsArr[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-
-            let formattedBeliStr = "-";
-            if (data.tanggalBeli && data.tanggalBeli !== "-") {
-                const dateBeliObj = new Date(data.tanggalBeli);
-                if (!isNaN(dateBeliObj)) {
-                    formattedBeliStr = `${dateBeliObj.getDate()} ${monthsArr[dateBeliObj.getMonth()]} ${dateBeliObj.getFullYear()}`;
-                } else {
-                    formattedBeliStr = data.tanggalBeli;
-                }
-            }
-
-            const detailTableRows = [
-                ["Nama Aset / Alat", data.nama],
-                ["Merk / Tipe", data.merk],
-                ["Kode Inventaris / SN", data.kode],
-                ["Tanggal Pembelian Alat", formattedBeliStr],
-                ["Lokasi / Ruangan", data.lokasi],
-                ["Tanggal Temuan Kerusakan", formattedDateStr],
-                ["Klasifikasi Kerusakan", data.jenisKerusakan],
-                ["Deskripsi & Kronologi Kerusakan", data.detail]
-            ];
-
-            doc.autoTable({
-                startY: 68,
-                margin: { left: 15, right: 15 },
-                body: detailTableRows,
-                theme: 'grid',
-                styles: { fontSize: 10, cellPadding: 4 },
-                columnStyles: {
-                    0: { cellWidth: 55, fontStyle: 'bold', fillColor: [243, 244, 246] },
-                    1: { cellWidth: 125 }
+        window.deleteRoom = (id) => {
+            customConfirm("Hapus Ruangan", "Apakah Anda yakin ingin menghapus ruangan ini?", async () => {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', id));
+                    showToast("Ruangan berhasil dihapus!");
+                } catch (err) {
+                    console.error("Gagal hapus ruangan:", err);
+                    showToast("Gagal menghapus ruangan.", "error");
                 }
             });
-
-            const finalTableY = doc.lastAutoTable.finalY;
-            doc.setFontSize(10);
-            doc.text("Demikian Berita Acara Kerusakan ini dibuat dengan sebenar-benarnya untuk digunakan sebagai landasan", 15, finalTableY + 12);
-            doc.text("tindak lanjut perbaikan atau pengajuan penggantian aset sesuai regulasi sarana prasarana RSU Dadi Keluarga.", 15, finalTableY + 17);
-
-            const sigY = finalTableY + 32;
-
-            doc.setFont("helvetica", "normal");
-            doc.text("Mengetahui,", 105, sigY, { align: 'center' });
-            
-            doc.text("Melaporkan,", 35, sigY + 6, { align: 'center' });
-            doc.setFont("helvetica", "bold");
-            doc.text("Kepala Ruang", 35, sigY + 11, { align: 'center' });
-
-            doc.setFont("helvetica", "normal");
-            doc.text("Menyetujui,", 105, sigY + 6, { align: 'center' });
-            doc.setFont("helvetica", "bold");
-            doc.text("Koordinator Rumah Tangga", 105, sigY + 11, { align: 'center' });
-
-            doc.setFont("helvetica", "normal");
-            doc.text("Mengesahkan,", 170, sigY + 6, { align: 'center' });
-            doc.setFont("helvetica", "bold");
-            doc.text("Manager Umum", 170, sigY + 11, { align: 'center' });
-
-            const signLinesY = sigY + 38;
-            doc.setFont("helvetica", "bold");
-            doc.text(`( ${data.signKepala} )`, 35, signLinesY, { align: 'center' });
-            doc.text(`( ${data.signKoor} )`, 105, signLinesY, { align: 'center' });
-            doc.text(`( ${data.signManager} )`, 170, signLinesY, { align: 'center' });
-
-            doc.save(`Berita_Acara_Rusak_${data.nama.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
-            showToast("Berita Acara Kerusakan berhasil dicetak!");
         };
-
-        window.exportMutationsToPDF = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
-
-            doc.setFontSize(22);
-            doc.setTextColor(0, 51, 204); 
-            doc.setFont("times", "bold");
-            doc.text("RSU DADI KELUARGA PURWOKERTO", 105, 18, { align: 'center' });
-            
-            doc.setFontSize(9);
-            doc.setTextColor(0, 51, 204); 
-            doc.setFont("times", "normal");
-            doc.text("Jl. Sultan Agung No. 8A, Teluk, Purwokerto Selatan, Kab. Banyumas", 105, 23, { align: 'center' });
-            doc.text("Telp: (0281) 6844005 • Email: info@rsudadikeluarga.co.id • Purwokerto 53145", 105, 27, { align: 'center' });
-            
-            doc.setDrawColor(0, 51, 204);
-            doc.setLineWidth(0.8);
-            doc.line(15, 30, 195, 30);
-            doc.setLineWidth(0.2);
-            doc.line(15, 31.2, 195, 31.2);
-
-            doc.setFontSize(14);
-            doc.setTextColor(0);
-            doc.setFont("helvetica", "bold");
-            doc.text("LAPORAN RIWAYAT MUTASI & STATUS ASET", 15, 42);
-            
-            doc.setFontSize(9);
-            doc.setFont("helvetica", "normal");
-            doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')} • Bagian Rumah Tangga`, 15, 47);
-
-            const tableRows = mutations.map((m, idx) => {
-                const dateStr = m.tanggalMutasi ? new Date(m.tanggalMutasi).toLocaleDateString('id-ID') : new Date(m.createdAt?.seconds * 1000).toLocaleDateString('id-ID');
-                const movementStr = m.tipe === 'Mutasi' ? `${m.dari} -> ${m.ke}` : m.dari;
-                return [
-                    idx + 1,
-                    dateStr,
-                    `${m.namaBarang} (${m.merk})`,
-                    m.tipe,
-                    movementStr,
-                    m.jumlah,
-                    m.keterangan || '-'
-                ];
-            });
-
-            doc.autoTable({
-                startY: 52,
-                head: [['No', 'Tanggal', 'Nama Aset', 'Status/Tipe', 'Asal & Tujuan Ruang', 'Qty', 'Keterangan']],
-                body: tableRows,
-                theme: 'striped',
-                headStyles: { fillColor: [2, 132, 199] }, // Brand Sky Blue
-                styles: { fontSize: 8, cellPadding: 3 },
-                columnStyles: {
-                    0: { cellWidth: 10 },
-                    1: { cellWidth: 22 },
-                    2: { cellWidth: 45 },
-                    3: { cellWidth: 20 },
-                    4: { cellWidth: 45 },
-                    5: { cellWidth: 12, hAlign: 'center' },
-                    6: { cellWidth: 26 }
-                }
-            });
-
-            const finalY = doc.lastAutoTable.finalY + 15;
-            doc.setFontSize(9);
-            doc.text("Purwokerto, " + new Date().toLocaleDateString('id-ID'), 140, finalY);
-            doc.text("Pencatat Logistik,", 30, finalY + 5);
-            doc.text("Koordinator Rumah Tangga,", 140, finalY + 5);
-
-            doc.text("( ____________________ )", 30, finalY + 28);
-            doc.text("Adi Wijaya, S.E.", 140, finalY + 28, { fontStyle: 'bold' });
-            doc.text("( ____________________ )", 140, finalY + 33);
-        }
     </script>
 </body>
 </html>
