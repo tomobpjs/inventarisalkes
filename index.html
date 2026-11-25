@@ -11,7 +11,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/@html5-qrcode/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
+            onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -782,8 +783,9 @@
                     showToast("Kamera membutuhkan HTTPS atau localhost. Buka aplikasi melalui koneksi aman dan izinkan akses kamera pada browser.", "error");
                     return;
                 }
-                if (typeof Html5Qrcode === 'undefined' || typeof Html5QrcodeSupportedFormats === 'undefined') {
-                    showToast("Library pemindai barcode belum berhasil dimuat. Periksa koneksi internet lalu muat ulang aplikasi.", "error");
+                if (typeof window.Html5Qrcode === 'undefined' || typeof window.Html5QrcodeSupportedFormats === 'undefined') {
+                    showToast("Library pemindai barcode belum tersedia. Pastikan internet aktif, tunggu halaman selesai dimuat, lalu muat ulang aplikasi.", "error");
+                    console.error("html5-qrcode belum termuat. Periksa akses ke unpkg.com atau cdn.jsdelivr.net.");
                     return;
                 }
 
@@ -919,14 +921,31 @@
                             throw new Error("Tidak ada kamera terdeteksi di perangkat.");
                         }
                     } catch (fallbackErr) {
-                        showToast("Izin kamera ditolak atau kamera tidak ditemukan pada browser smartphone Anda.", "error");
+                        console.error("Kamera gagal dijalankan. Percobaan mode environment:", directErr, "Percobaan kamera alternatif:", fallbackErr);
+                        const detail = String(fallbackErr && fallbackErr.message ? fallbackErr.message : directErr && directErr.message ? directErr.message : "").toLowerCase();
+                        let message = "Kamera tidak dapat dibuka. Pastikan izin kamera browser diatur ke Izinkan dan kamera tidak sedang digunakan aplikasi lain.";
+                        if (detail.includes("permission") || detail.includes("notallowed")) {
+                            message = "Akses kamera ditolak. Klik ikon gembok/pengaturan situs pada address bar, ubah izin Kamera menjadi Izinkan, lalu muat ulang halaman.";
+                        } else if (detail.includes("notfound") || detail.includes("no camera") || detail.includes("device")) {
+                            message = "Kamera tidak ditemukan. Periksa kamera perangkat atau pilih kamera yang tersedia pada browser.";
+                        } else if (detail.includes("secure") || detail.includes("https")) {
+                            message = "Kamera membutuhkan HTTPS atau localhost. Buka aplikasi melalui alamat HTTPS.";
+                        } else if (detail.includes("busy") || detail.includes("in use") || detail.includes("could not start")) {
+                            message = "Kamera sedang digunakan atau gagal dimulai. Tutup aplikasi lain yang memakai kamera, kemudian coba lagi.";
+                        }
+                        showToast(message, "error");
                         if (window.activeScanner) {
+                            try {
+                                if (window.activeScanner.isScanning) await window.activeScanner.stop();
+                            } catch (stopErr) {
+                                console.warn("Pembersihan kamera:", stopErr);
+                            }
                             try { window.activeScanner.clear(); } catch(e){}
                             window.activeScanner = null;
                         }
                         reader.innerHTML = "";
                         reader.classList.add('hidden');
-                        scanBtnText.innerText = "Aktifkan Kamera";
+                        scanBtnText.innerText = "Aktifkan Kamera (Dukung Orientasi Landscape/Portrait)";
                     }
                 }
             };
